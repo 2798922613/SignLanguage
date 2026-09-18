@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>American Retro Particle System - Enhanced</title>
+    <link href="https://fonts.googleapis.com/css2?family=VT323&family=ZCOOL+KuaiLe&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --retro-red: #FF3131;
+            --retro-yellow: #FFDE59;
+            --retro-blue: #004AAD;
+            --retro-bg: #050505;
+        }
+
+        body { 
+            margin: 0; 
+            overflow: hidden; 
+            background: var(--retro-bg); 
+            font-family: 'VT323', 'ZCOOL KuaiLe', sans-serif;
+        }
+
+        #particle-canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+        }
+
+        #video-container {
+            position: absolute;
+            bottom: 30px;
+            right: 30px;
+            width: 240px;
+            height: 180px;
+            border: 8px solid var(--retro-yellow);
+            box-shadow: 12px 12px 0 var(--retro-red);
+            background: #000;
+            z-index: 10;
+        }
+
+        #webcam, #output_canvas {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            transform: scaleX(-1);
+            filter: grayscale(0.2) contrast(1.5);
+        }
+
+        #status-ui {
+            position: absolute;
+            top: 30px;
+            left: 30px;
+            background: rgba(0,0,0,0.9); /* 稍微加深背景色 */
+            border: 6px solid var(--retro-blue);
+            box-shadow: 10px 10px 0 rgba(0, 74, 173, 0.8);
+            padding: 20px 30px;
+            z-index: 10;
+            pointer-events: none;
+        }
+
+        #current-gesture { 
+            font-size: 42px;
+            color: var(--retro-yellow); 
+            text-transform: uppercase;
+            letter-spacing: 4px;
+            text-shadow: 4px 4px 0 var(--retro-red);
+            margin-bottom: 10px;
+        }
+
+        #gesture-queue { 
+            font-size: 24px; 
+            color: #fff; 
+            font-family: 'VT323';
+        }
+
+        #buffer-canvas { display: none; }
+    </style>
+</head>
+<body>
+
+<div id="status-ui">
+    <div id="current-gesture">SYSTEM READY...</div>
+    <div id="gesture-queue">QUEUE: []</div>
+</div>
+
+<canvas id="particle-canvas"></canvas>
+<canvas id="buffer-canvas"></canvas>
+
+<div id="video-container">
+    <video id="webcam" autoplay playsinline></video>
+    <canvas id="output_canvas"></canvas>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"></script>
+
+<script type="module">
+    const canvas = document.getElementById('particle-canvas');
+    const ctx = canvas.getContext('2d');
+    const bufferCanvas = document.getElementById('buffer-canvas');
+    const bCtx = bufferCanvas.getContext('2d');
+
+    let particles = [];
+    let animationId;
+    let isAssembling = false;
+
+    class Particle {
+        constructor(x, y, color) {
+            this.homeX = x;
+            this.homeY = y;
+            this.x = Math.random() * canvas.width;
+            this.y = Math.random() * canvas.height;
+            this.color = color;
+            this.size = 3.5; 
+            this.vx = (Math.random() - 0.5) * 2;
+            this.vy = (Math.random() - 0.5) * 2;
+            this.ease = 0.18; 
+        }
+
+        update() {
+            if (isAssembling) {
+                this.x += (this.homeX - this.x) * this.ease;
+                this.y += (this.homeY - this.y) * this.ease;
+            } else {
+                this.x += this.vx;
+                this.y += this.vy;
+                if (this.x < 0 || this.x > canvas.width) this.vx *= -1;
+                if (this.y < 0 || this.y > canvas.height) this.vy *= -1;
+            }
+        }
+
+        draw() {
+            ctx.fillStyle = this.color;
+            ctx.fillRect(this.x, this.y, this.size, this.size);
+        }
+    }
+
+    function initParticles(img) {
+        const maxWidth = window.innerWidth * 0.85; 
+        const maxHeight = window.innerHeight * 0.85;
+        let w = img.width;
+        let h = img.height;
+
+        const ratio = Math.min(maxWidth / w, maxHeight / h);
+        
+        // 关键修复：长宽比例计算后必须取整，否则小数会导致 getImageData 像素读取错位产生切割和变形
+        w = Math.floor(w * ratio);
+        h = Math.floor(h * ratio);
+
+        bufferCanvas.width = w;
+        bufferCanvas.height = h;
+        bCtx.clearRect(0, 0, w, h);
+        bCtx.drawImage(img, 0, 0, w, h);
+
+        const imageData = bCtx.getImageData(0, 0, w, h).data;
+        particles = [];
+
+        const step = 4; 
+        
+        // 计算居中偏移量
+        const offsetX = (window.innerWidth - w) / 2;
+        const offsetY = (window.innerHeight - h) / 2;
+
+        for (let y = 0; y < h; y += step) {
+            for (let x = 0; x < w; x += step) {
+                const index = (y * w + x) * 4;
+                const r = imageData[index];
+                const g = imageData[index + 1];
+                const b = imageData[index + 2];
+                const alpha = imageData[index + 3];
+
+                if (alpha > 150) { 
+                    const color = `rgb(${r}, ${g}, ${b})`; 
+                    particles.push(new Particle(x + offsetX, y + offsetY, color));
+                }
+            }
+        }
+    }
+
+    function animate() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.globalAlpha = 1.0; 
+        particles.forEach(p => {
+            p.update();
+            p.draw();
+        });
+        animationId = requestAnimationFrame(animate);
+    }
+
+    window.addEventListener('resize', () => {
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+    });
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+    animate();
+
+    function transformToImage(imgName) {
+        isAssembling = false;
+        const newImg = new Image();
+        newImg.src = imgName;
+        newImg.onload = () => {
+            initParticles(newImg);
+            isAssembling = true;
+            lastGestureTime = Date.now();
+        };
+        
+        clearTimeout(window.particleTimeout);
+        window.particleTimeout = setTimeout(() => {
+            isAssembling = false;
+        }, 8000); 
+    }
+
+    /** --- 手势识别逻辑保持不变 --- **/
+    const videoElement = document.getElementById('webcam');
+    const canvasElement = document.getElementById('output_canvas');
+    const canvasCtx = canvasElement.getContext('2d');
+    const DEBOUNCE_THRESHOLD = 8;
+    const GESTURE_LOCK_TIME = 2000;
+    const QUEUE_MAX_LENGTH = 6;
+    let lastGestureTime = 0;
+    let gestureCount = 0;
+    let lastGestureName = "";
+    let gestureQueue = [];
+
+    const comboMap = {
+        "我,喜欢,你": "我喜欢你.png",
+        "我,爱,你": "我爱你.png",
+        "今天,天气,好": "今天天气好.png",
+        "我,吃,苹果": "我吃苹果.png",
+        "你,吃,了,不": "你吃了吗.png",
+        "我,回,家": "我回家.png",
+        "你,好": "你好.png",
+        "我,很,高兴": "我很高兴.png",
+        "你,喜欢,吃,苹果,不": "你喜欢吃苹果吗.png",
+        "我,很,高兴,认识,你": "我很高兴认识你.png"
+    };
+
+    function analyzeGestures(results) {
+        canvasCtx.save();
+        canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
+        if (results.multiHandLandmarks) {
+            for (const landmarks of results.multiHandLandmarks) {
+                drawConnectors(canvasCtx, landmarks, HAND_CONNECTIONS, {color: '#FFDE59', lineWidth: 4});
+                drawLandmarks(canvasCtx, landmarks, {color: '#FF3131', lineWidth: 2, radius: 4});
+            }
+        }
+        canvasCtx.restore();
+
+        if (Date.now() - lastGestureTime < GESTURE_LOCK_TIME) return;
+
+        let currentFrameGesture = "";
+        const hands = results.multiHandLandmarks;
+
+        if (hands && hands.length > 0) {
+            const h1 = hands[0];
+            const isTwoHands = hands.length >= 2;
+            const h2 = isTwoHands ? hands[1] : null;
+            const getDist = (a, b) => Math.hypot(a.x-b.x, a.y-b.y, a.z-b.z);
+            const isExtended = (tip, pip, mcp) => getDist(tip, mcp) > getDist(pip, mcp);
+
+            const thumbUp = h1[4].y < h1[3].y && h1[4].y < h1[2].y;
+            const indexUp = isExtended(h1[8], h1[7], h1[5]);
+            const middleUp = isExtended(h1[12], h1[11], h1[9]);
+            const ringUp = isExtended(h1[16], h1[15], h1[13]);
+            const pinkyUp = isExtended(h1[20], h1[19], h1[17]);
+
+            if (isTwoHands) {
+                const h2ThumbDown = h2[4].y > h2[3].y;
+                const h1ThumbDown = h1[4].y > h1[3].y;
+                if (getDist(h1[4], h2[4]) < 0.12 && getDist(h1[8], h2[8]) < 0.12 && h1ThumbDown && h2ThumbDown) currentFrameGesture = "爱";
+                else if (getDist(h1[8], h2[8]) < 0.1 && h1[8].y < h1[5].y) currentFrameGesture = "家";
+                else if (indexUp && !middleUp && getDist(h1[8], h2[8]) < 0.2) currentFrameGesture = "苹果";
+                else if (indexUp && middleUp && !ringUp) currentFrameGesture = "认识";
+                else if (h1[0].y < h1[9].y && h2[0].y < h2[9].y && h1[9].y > 0.4 && h2[9].y > 0.4) currentFrameGesture = "高兴";
+            } else {
+                const dotL = (h1[4].x - h1[2].x) * (h1[8].x - h1[5].x) + (h1[4].y - h1[2].y) * (h1[8].y - h1[5].y);
+                if (thumbUp && indexUp && !middleUp && !ringUp && !pinkyUp && Math.abs(dotL) < 0.02) currentFrameGesture = "很";
+                else if (thumbUp && indexUp && !middleUp && !ringUp && !pinkyUp && h1[8].y > 0.55) currentFrameGesture = "喜欢";
+                else if (h1[4].y > h1[0].y && h1[8].y > h1[0].y && h1[12].y > h1[0].y && h1[16].y > h1[0].y && h1[20].y > h1[0].y) currentFrameGesture = "了";
+                else if (thumbUp && pinkyUp && !indexUp && !middleUp && !ringUp) currentFrameGesture = "回";
+                else if (indexUp && !middleUp && h1[8].y > h1[5].y) currentFrameGesture = "我";
+                else if (indexUp && !middleUp && h1[8].z < -0.1) currentFrameGesture = "你";
+                else if (thumbUp && !indexUp) currentFrameGesture = "好";
+                else if (pinkyUp && !indexUp) currentFrameGesture = "不";
+                else if (indexUp && !middleUp && h1[8].y < h1[5].y) currentFrameGesture = "天气";
+                else if (indexUp && middleUp && !ringUp) currentFrameGesture = "吃";
+                else if (getDist(h1[4], h1[8]) < 0.05) currentFrameGesture = "饭";
+                else if (h1[9].y > 0.6) currentFrameGesture = "今天";
+            }
+        }
+
+        if (currentFrameGesture !== "" && currentFrameGesture === lastGestureName) {
+            gestureCount++;
+        } else {
+            gestureCount = 0;
+            lastGestureName = currentFrameGesture;
+        }
+
+        if (gestureCount >= DEBOUNCE_THRESHOLD) {
+            triggerGesture(currentFrameGesture);
+            gestureCount = 0;
+        }
+    }
+
+    function triggerGesture(name) {
+        if (gestureQueue[gestureQueue.length - 1] === name) return;
+        gestureQueue.push(name);
+        if (gestureQueue.length > QUEUE_MAX_LENGTH) gestureQueue.shift();
+        
+        document.getElementById('current-gesture').innerText = "DETECTED: " + name;
+        document.getElementById('gesture-queue').innerText = "QUEUE: [" + gestureQueue.join(",") + "]";
+        
+        const queueStr = gestureQueue.join(",");
+        let matched = false;
+        
+        for (let key in comboMap) {
+            if (queueStr.endsWith(key)) {
+                transformToImage(comboMap[key]);
+                gestureQueue = [];
+                matched = true;
+                break;
+            }
+        }
+        if (!matched) transformToImage(name + ".png");
+    }
+
+    const hands = new Hands({
+        locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
+    });
+
+    hands.setOptions({
+        maxNumHands: 2,
+        modelComplexity: 1,
+        minDetectionConfidence: 0.7,
+        minTrackingConfidence: 0.7
+    });
+
+    hands.onResults(analyzeGestures);
+
+    const cameraInstance = new Camera(videoElement, {
+        onFrame: async () => {
+            await hands.send({ image: videoElement });
+        },
+        width: 640,
+        height: 480
+    });
+
+    cameraInstance.start();
+</script>
+</body>
+</html>

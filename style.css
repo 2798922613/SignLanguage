@@ -1,0 +1,385 @@
+/* ===== 手语识别交互系统 - 美式复古拼贴风格 ===== */
+
+:root {
+    --retro-bg: #0d0a08;
+    --retro-paper: #f4ecd8;
+    --retro-dark: #2c1e16;
+    --retro-red: #e74c3c;
+    --retro-yellow: #f1c40f;
+    --retro-blue: #3498db;
+}
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body, html {
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    background-color: var(--retro-bg);
+    font-family: 'VT323', 'ZCOOL KuaiLe', 'Microsoft YaHei', sans-serif;
+}
+
+/* ===== 摄像头全屏背景 ===== */
+#video-container {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    z-index: 0;
+    filter: sepia(0.8) contrast(1.4) brightness(0.15) saturate(0.8) hue-rotate(-10deg);
+    pointer-events: none;
+    background: #000;
+}
+
+#webcam {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    transform: scaleX(-1);
+}
+
+#output-canvas {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    transform: scaleX(-1);
+}
+
+/* ===== 噪点覆盖层 ===== */
+#noise-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    z-index: 5;
+    background-image: url('data:image/svg+xml,%3Csvg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg"%3E%3Cfilter id="noiseFilter"%3E%3CfeTurbulence type="fractalNoise" baseFrequency="0.65" numOctaves="3" stitchTiles="stitch"/%3E%3C/filter%3E%3Crect width="100%25" height="100%25" filter="url(%23noiseFilter)" opacity="0.08"/%3E%3C/svg%3E');
+    pointer-events: none;
+    mix-blend-mode: screen;
+}
+
+/* ===== 图片直接居中显示层 ===== */
+#doodle-container {
+    width: 100vw;
+    height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: fixed;
+    top: 0;
+    left: 0;
+    z-index: 8;
+    pointer-events: none;
+}
+
+#doodle-display {
+    max-width: 55%;
+    max-height: 55%;
+    opacity: 0;
+    display: none;
+    transition: opacity 0.5s ease;
+    filter: drop-shadow(5px 5px 0px rgba(255, 255, 255, 0.15))
+            drop-shadow(-3px -3px 0px rgba(231, 76, 60, 0.2));
+}
+
+/* ===== 粒子画布 ===== */
+#particle-canvas {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    z-index: 10;
+    pointer-events: none;
+}
+
+/* ===== UI层 ===== */
+#ui-layer {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 100;
+    pointer-events: none;
+}
+
+/* ===== 状态面板（紧凑版） ===== */
+#status-panel {
+    position: absolute;
+    top: 20px;
+    left: 20px;
+    background-color: var(--retro-paper);
+    background-image: radial-gradient(#d1c4b0 2px, transparent 2px);
+    background-size: 10px 10px;
+    border: 2px solid var(--retro-dark);
+    padding: 12px 18px;
+    max-width: 220px;
+    box-shadow: 6px 6px 0px var(--retro-red);
+    transform: rotate(-2deg);
+    transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    position: relative;
+}
+
+#status-panel::before {
+    content: '';
+    position: absolute;
+    top: -12px;
+    left: 50%;
+    transform: translateX(-50%) rotate(3deg);
+    width: 100px;
+    height: 25px;
+    background: rgba(223, 214, 196, 0.95);
+    border: 1px solid #bbaea0;
+    z-index: 10;
+    box-shadow: 2px 2px 5px rgba(0,0,0,0.1);
+}
+
+#status-panel.pulse-effect {
+    transform: rotate(-2deg) scale(1.05);
+    box-shadow: 8px 8px 0px var(--retro-red);
+}
+
+/* Dymo打字机标签 */
+.dymo-label {
+    background: var(--retro-dark);
+    color: var(--retro-paper);
+    display: inline-block;
+    padding: 3px 8px;
+    font-family: 'Courier Prime', monospace;
+    font-size: 10px;
+    font-weight: bold;
+    letter-spacing: 1px;
+    transform: rotate(1deg) translateY(-6px);
+    box-shadow: 2px 2px 0px var(--retro-yellow);
+    margin-bottom: 4px;
+}
+
+#current-gesture {
+    font-size: 36px;
+    font-family: 'VT323', 'ZCOOL KuaiLe', sans-serif;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    color: var(--retro-red);
+    -webkit-text-stroke: 1px var(--retro-dark);
+    text-shadow: 2px 2px 0px var(--retro-dark);
+    margin-top: 4px;
+    line-height: 1.1;
+    word-break: break-all;
+}
+
+/* 提示词贴纸框（紧凑版） */
+.hint-container {
+    margin-top: 10px;
+    display: flex;
+    gap: 4px;
+    flex-direction: row;
+    flex-wrap: wrap;
+    background: #fff;
+    padding: 6px;
+    border: 2px solid var(--retro-dark);
+    box-shadow: inset 2px 2px 0px rgba(0,0,0,0.05);
+    transform: rotate(1.5deg);
+}
+
+.hint-tag {
+    font-size: 9px;
+    padding: 3px 6px;
+    border: 1.5px solid var(--retro-dark);
+    color: var(--retro-dark);
+    background: #e0d6c8;
+    font-weight: bold;
+    font-family: 'Courier Prime', monospace;
+    white-space: nowrap;
+    box-shadow: 1.5px 1.5px 0px var(--retro-dark);
+}
+
+/* ===== 词序列队列（右上角） ===== */
+#word-queue-panel {
+    position: absolute;
+    top: 20px;
+    right: 20px;
+    background-color: var(--retro-paper);
+    background-image: radial-gradient(rgba(44, 30, 22, 0.1) 1.5px, transparent 1.5px);
+    background-size: 6px 6px;
+    border: 2px solid var(--retro-dark);
+    padding: 12px 16px;
+    min-width: 160px;
+    max-width: 280px;
+    box-shadow: 5px 5px 0px var(--retro-yellow);
+    transform: rotate(2deg);
+}
+
+#word-queue {
+    margin-top: 8px;
+    min-height: 30px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+#word-queue:empty::after {
+    content: '等待输入...';
+    color: #999;
+    font-style: italic;
+    font-size: 14px;
+}
+
+.word-item {
+    display: inline-block;
+    padding: 4px 10px;
+    background: var(--retro-red);
+    color: white;
+    font-family: 'Courier Prime', monospace;
+    font-size: 14px;
+    font-weight: bold;
+    border: 2px solid var(--retro-dark);
+    box-shadow: 2px 2px 0px var(--retro-dark);
+    animation: wordAppear 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+@keyframes wordAppear {
+    from {
+        transform: scale(0) rotate(-10deg);
+        opacity: 0;
+    }
+    to {
+        transform: scale(1) rotate(0deg);
+        opacity: 1;
+    }
+}
+
+/* ===== 数据面板（左下角，更紧凑） ===== */
+#data-panel {
+    position: absolute;
+    bottom: 20px;
+    left: 20px;
+    width: 200px;
+    background-color: var(--retro-paper);
+    background-image: radial-gradient(rgba(44, 30, 22, 0.1) 1.5px, transparent 1.5px);
+    background-size: 6px 6px;
+    border: 2px solid var(--retro-dark);
+    color: var(--retro-dark);
+    padding: 12px;
+    font-family: 'Courier Prime', monospace;
+    box-shadow: 5px 5px 0px var(--retro-blue);
+    transform: rotate(1deg);
+}
+
+#data-panel::after {
+    content: '';
+    position: absolute;
+    bottom: 15px;
+    right: -18px;
+    transform: rotate(45deg);
+    width: 40px;
+    height: 15px;
+    background: rgba(223, 214, 196, 0.8);
+    border: 1px solid #bbaea0;
+    z-index: 10;
+}
+
+.data-header {
+    font-size: 11px;
+    font-weight: bold;
+    margin-bottom: 8px;
+    border-bottom: 2px double var(--retro-dark);
+    padding-bottom: 6px;
+    color: var(--retro-red);
+    display: flex;
+    justify-content: space-between;
+    text-transform: uppercase;
+}
+
+.data-row {
+    display: flex;
+    justify-content: space-between;
+    font-size: 10px;
+    margin-bottom: 6px;
+    border-bottom: 1px dashed #a68a76;
+    padding-bottom: 3px;
+    font-weight: bold;
+}
+
+.data-val {
+    background: var(--retro-dark);
+    color: #fff;
+    padding: 0 5px;
+    font-size: 9px;
+}
+
+#log-stream {
+    font-size: 9px;
+    height: 36px;
+    overflow: hidden;
+    margin-top: 10px;
+    line-height: 1.3;
+    color: var(--retro-dark);
+    background: #fff;
+    padding: 6px;
+    border: 2px solid var(--retro-dark);
+    box-shadow: inset 2px 2px 0px rgba(0,0,0,0.1);
+}
+
+/* ===== 加载屏幕 ===== */
+#loading-screen {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background: rgba(0, 0, 0, 0.95);
+    z-index: 9999;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: opacity 0.5s ease;
+}
+
+.loading-content {
+    text-align: center;
+}
+
+.loading-spinner {
+    width: 60px;
+    height: 60px;
+    border: 6px solid rgba(255, 255, 255, 0.1);
+    border-top-color: var(--retro-red);
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+    margin: 0 auto 20px;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+.loading-text {
+    color: var(--retro-paper);
+    font-size: 24px;
+    margin-bottom: 10px;
+}
+
+.loading-subtext {
+    color: var(--retro-red);
+    font-size: 14px;
+    font-family: 'Courier Prime', monospace;
+}
+
+/* ===== 句子匹配高亮 ===== */
+#sentence-match {
+    background: var(--retro-red) !important;
+    animation: pulse 1s ease infinite;
+}
+
+@keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.6; }
+}

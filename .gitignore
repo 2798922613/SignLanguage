@@ -1,0 +1,12 @@
+# 系统文件
+.DS_Store
+Thumbs.db
+
+# 依赖 / 构建产物 / 日志
+node_modules/
+dist/
+build/
+*.log
+
+# 大型数据集（8.7GB、12.5 万个 txt），不纳入 git，请单独备份到移动硬盘或网盘
+slr500_words_joints/

@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>手语识别交互系统 - American Retro Collage</title>
+    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=VT323&family=ZCOOL+KuaiLe&family=Courier+Prime:wght@400;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <!-- 摄像头全屏背景层 -->
+    <div id="video-container">
+        <video id="webcam" autoplay playsinline></video>
+        <canvas id="output-canvas"></canvas>
+    </div>
+
+    <!-- 噪点覆盖层 -->
+    <div id="noise-overlay"></div>
+
+    <!-- 粒子画布（图片和文字粒子效果） -->
+    <canvas id="particle-canvas"></canvas>
+    <canvas id="buffer-canvas" style="display:none"></canvas>
+
+    <!-- 图片直接居中显示层 -->
+    <div id="doodle-container">
+        <img id="doodle-display" src="" alt="Gesture Display">
+    </div>
+
+    <!-- UI层 - 美式复古拼贴风格 -->
+    <div id="ui-layer">
+        <!-- 状态面板 -->
+        <div id="status-panel">
+            <div class="dymo-label">CURRENT GESTURE</div>
+            <div id="current-gesture">等待输入</div>
+            <div class="hint-container">
+                <span class="hint-tag">实时识别</span>
+                <span class="hint-tag">自动拼接</span>
+                <span class="hint-tag">句子匹配</span>
+            </div>
+        </div>
+
+        <!-- 词序列队列 -->
+        <div id="word-queue-panel">
+            <div class="dymo-label">WORD SEQUENCE</div>
+            <div id="word-queue"></div>
+        </div>
+
+        <!-- 数据面板 -->
+        <div id="data-panel">
+            <div class="data-header">
+                <span>SYSTEM STATUS</span>
+                <span id="status-indicator" class="data-val">IDLE</span>
+            </div>
+            <div class="data-row">
+                <span>识别延迟</span>
+                <span class="data-val" id="latency">--ms</span>
+            </div>
+            <div class="data-row">
+                <span>词序列长度</span>
+                <span class="data-val" id="queue-length">0</span>
+            </div>
+            <div class="data-row">
+                <span>句子匹配</span>
+                <span class="data-val" id="sentence-match">无</span>
+            </div>
+            <div id="log-stream">系统就绪，等待手势输入...</div>
+        </div>
+    </div>
+
+    <!-- 加载屏幕 -->
+    <div id="loading-screen">
+        <div class="loading-content">
+            <div class="loading-spinner"></div>
+            <div class="loading-text">正在加载手语识别系统...</div>
+            <div class="loading-subtext">Initializing MediaPipe Hands</div>
+        </div>
+    </div>
+
+    <!-- MediaPipe Hands -->
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js"></script>
+    
+    <!-- 图片数据（嵌入base64，解决file://协议跨域问题） -->
+    <script src="image-data.js"></script>
+    
+    <!-- 手势识别模块 -->
+    <script src="gesture-recognizer.js"></script>
+    
+    <!-- 主逻辑 -->
+    <script src="script.js"></script>
+</body>
+</html>

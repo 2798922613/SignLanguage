@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>测试图片粒子效果</title>
+    <style>
+        body { margin: 0; overflow: hidden; background: #000; }
+        #particle-canvas { position: fixed; top: 0; left: 0; z-index: 10; }
+    </style>
+</head>
+<body>
+<canvas id="particle-canvas"></canvas>
+<script>
+const canvas = document.getElementById('particle-canvas');
+const ctx = canvas.getContext('2d');
+let particles = [];
+let isAssembling = false;
+let animationId = null;
+
+class Particle {
+    constructor(x, y, color) {
+        this.homeX = x;
+        this.homeY = y;
+        this.x = Math.random() * canvas.width;
+        this.y = Math.random() * canvas.height;
+        this.color = color;
+        this.size = 3.5;
+        this.vx = (Math.random() - 0.5) * 2;
+        this.vy = (Math.random() - 0.5) * 2;
+        this.ease = 0.18;
+    }
+    update() {
+        if (isAssembling) {
+            this.x += (this.homeX - this.x) * this.ease;
+            this.y += (this.homeY - this.y) * this.ease;
+        } else {
+            this.x += this.vx;
+            this.y += this.vy;
+            if (this.x < 0 || this.x > canvas.width) this.vx *= -1;
+            if (this.y < 0 || this.y > canvas.height) this.vy *= -1;
+        }
+    }
+    draw() {
+        ctx.fillStyle = this.color;
+        ctx.fillRect(this.x, this.y, this.size, this.size);
+    }
+}
+
+function initImageParticles(img) {
+    const bufferCanvas = document.createElement('canvas');
+    const bCtx = bufferCanvas.getContext('2d');
+    const maxWidth = window.innerWidth * 0.85;
+    const maxHeight = window.innerHeight * 0.85;
+    let w = img.naturalWidth || img.width;
+    let h = img.naturalHeight || img.height;
+    const ratio = Math.min(maxWidth / w, maxHeight / h);
+    w = Math.floor(w * ratio);
+    h = Math.floor(h * ratio);
+    bufferCanvas.width = w;
+    bufferCanvas.height = h;
+    bCtx.drawImage(img, 0, 0, w, h);
+    const imageData = bCtx.getImageData(0, 0, w, h).data;
+    particles = [];
+    const step = 4;
+    const offsetX = (window.innerWidth - w) / 2;
+    const offsetY = (window.innerHeight - h) / 2;
+    for (let y = 0; y < h; y += step) {
+        for (let x = 0; x < w; x += step) {
+            const index = (y * w + x) * 4;
+            const r = imageData[index];
+            const g = imageData[index + 1];
+            const b = imageData[index + 2];
+            const alpha = imageData[index + 3];
+            if (alpha > 150) {
+                const color = `rgb(${r}, ${g}, ${b})`;
+                particles.push(new Particle(x + offsetX, y + offsetY, color));
+            }
+        }
+    }
+    console.log('粒子数量:', particles.length);
+    return particles.length > 0;
+}
+
+function animate() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.globalAlpha = 1.0;
+    particles.forEach(p => { p.update(); p.draw(); });
+    animationId = requestAnimationFrame(animate);
+}
+
+canvas.width = window.innerWidth;
+canvas.height = window.innerHeight;
+animate();
+
+const img = new Image();
+img.onload = () => {
+    console.log('图片加载成功:', img.naturalWidth, 'x', img.naturalHeight);
+    if (initImageParticles(img)) {
+        isAssembling = true;
+        console.log('粒子效果启动成功！');
+    } else {
+        console.log('粒子创建失败');
+    }
+};
+img.onerror = () => console.log('图片加载失败');
+img.src = '组词效果/我.png';
+</script>
+</body>
+</html>
