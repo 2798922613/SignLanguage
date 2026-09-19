@@ -446,12 +446,19 @@ class GestureRecognizer {
       // 跳过17个基础词汇（由硬编码规则处理）
       if (this.BASIC_WORDS.includes(word)) continue;
 
-      let sumSqDiff = 0;
-      for (let i = 0; i < query.length; i++) {
-        const diff = query[i] - template[i];
-        sumSqDiff += diff * diff;
+      // template 为原型数组 [proto1, proto2, proto3]，取与查询距离最小的原型
+      const protos = Array.isArray(template[0]) ? template : [template];
+      let dist = Infinity;
+      for (let p = 0; p < protos.length; p++) {
+        const proto = protos[p];
+        let sumSqDiff = 0;
+        for (let i = 0; i < query.length; i++) {
+          const diff = query[i] - proto[i];
+          sumSqDiff += diff * diff;
+        }
+        const d = Math.sqrt(sumSqDiff / query.length);
+        if (d < dist) dist = d;
       }
-      const dist = Math.sqrt(sumSqDiff / query.length);
 
       if (dist < bestDist) {
         secondBestDist = bestDist;
