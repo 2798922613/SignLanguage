@@ -31,7 +31,6 @@ body, html {
     width: 100vw;
     height: 100vh;
     z-index: 0;
-    filter: sepia(0.8) contrast(1.4) brightness(0.15) saturate(0.8) hue-rotate(-10deg);
     pointer-events: none;
     background: #000;
 }
@@ -41,6 +40,10 @@ body, html {
     height: 100%;
     object-fit: cover;
     transform: scaleX(-1);
+    /* 复古滤镜只作用于摄像头画面。原先挂在 #video-container 上，
+       会把同层的 #output-canvas 骨骼一起压到 brightness(0.15)，
+       骨骼线几乎全黑看不见。 */
+    filter: sepia(0.8) contrast(1.4) brightness(0.15) saturate(0.8) hue-rotate(-10deg);
 }
 
 #output-canvas {
@@ -382,4 +385,31 @@ body, html {
 @keyframes pulse {
     0%, 100% { opacity: 1; }
     50% { opacity: 0.6; }
+}
+
+/* ===== 运行时诊断面板 ===== */
+#diag-panel {
+    display: none;
+    position: fixed;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    max-width: 90vw;
+    max-height: 30vh;
+    overflow-y: auto;
+    z-index: 9999;
+    padding: 12px 18px;
+    background: rgba(20, 0, 0, 0.94);
+    border: 3px solid var(--retro-red);
+    box-shadow: 6px 6px 0 rgba(231, 76, 60, 0.6);
+    font-family: 'Courier Prime', 'VT323', monospace;
+    font-size: 13px;
+    line-height: 1.6;
+    color: #ffd7d7;
+    pointer-events: none;
+}
+
+#diag-panel .diag-line {
+    white-space: pre-wrap;
+    word-break: break-all;
 }

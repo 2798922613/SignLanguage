@@ -5,12 +5,19 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>手语识别交互系统 - American Retro Collage</title>
     <link rel="stylesheet" href="style.css">
-    <link href="https://fonts.googleapis.com/css2?family=VT323&family=ZCOOL+KuaiLe&family=Courier+Prime:wght@400;700&display=swap" rel="stylesheet">
+    <!--
+      字体改为非阻塞加载。
+      fonts.googleapis.com 在国内网络下会长时间挂起，而 window 'load' 事件必须等所有
+      样式表/字体就绪才触发 —— 这会让 init() 永远不执行（表现为：无骨骼、无识别）。
+      media="print" + onload 切换可让字体异步加载，绝不阻塞页面初始化。
+    -->
+    <link href="https://fonts.googleapis.com/css2?family=VT323&family=ZCOOL+KuaiLe&family=Courier+Prime:wght@400;700&display=swap"
+          rel="stylesheet" media="print" onload="this.media='all'">
 </head>
 <body>
     <!-- 摄像头全屏背景层 -->
     <div id="video-container">
-        <video id="webcam" autoplay playsinline></video>
+        <video id="webcam" autoplay playsinline muted></video>
         <canvas id="output-canvas"></canvas>
     </div>
 
@@ -36,6 +43,7 @@
                 <span class="hint-tag">实时识别</span>
                 <span class="hint-tag">自动拼接</span>
                 <span class="hint-tag">句子匹配</span>
+                <span class="hint-tag">SLR500词库</span>
             </div>
         </div>
 
@@ -67,27 +75,59 @@
         </div>
     </div>
 
+    <!-- 运行时诊断面板：任何依赖/推理失败都会显示在这里，不再静默黑屏 -->
+    <div id="diag-panel"></div>
+
     <!-- 加载屏幕 -->
     <div id="loading-screen">
         <div class="loading-content">
             <div class="loading-spinner"></div>
             <div class="loading-text">正在加载手语识别系统...</div>
-            <div class="loading-subtext">Initializing MediaPipe Hands</div>
+            <div class="loading-subtext" id="loading-subtext">Initializing MediaPipe Hands</div>
         </div>
     </div>
+
+    <script>
+        // 全局诊断：脚本必须在 error 捕获阶段监听，资源加载失败不会冒泡
+        window.__diag = function (msg) {
+            console.error('[DIAG] ' + msg);
+            var sub = document.getElementById('loading-subtext');
+            if (sub) sub.textContent = msg;
+            var panel = document.getElementById('diag-panel');
+            if (!panel) return;
+            panel.style.display = 'block';
+            var line = document.createElement('div');
+            line.className = 'diag-line';
+            line.textContent = '! ' + msg;
+            panel.appendChild(line);
+        };
+        window.addEventListener('error', function (e) {
+            var t = e && e.target;
+            if (t && (t.tagName === 'SCRIPT' || t.tagName === 'LINK')) {
+                var name = (t.src || t.href || '').split('/').pop().split('?')[0];
+                window.__diag('资源加载失败: ' + name + '（请检查网络能否访问 cdn.jsdelivr.net）');
+            }
+        }, true);
+        window.addEventListener('unhandledrejection', function (e) {
+            window.__diag('未捕获异常: ' + ((e.reason && e.reason.message) || e.reason));
+        });
+    </script>
 
     <!-- MediaPipe Hands -->
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js"></script>
-    
+
     <!-- 图片数据（嵌入base64，解决file://协议跨域问题） -->
     <script src="image-data.js"></script>
-    
+
+    <!-- SLR500 模板数据 -->
+    <script src="slr500-templates.js"></script>
+
     <!-- 手势识别模块 -->
     <script src="gesture-recognizer.js"></script>
-    
+
     <!-- 主逻辑 -->
     <script src="script.js"></script>
 </body>

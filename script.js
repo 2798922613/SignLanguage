@@ -23,7 +23,7 @@ const comboMap = {
     "我,爱,你": "我爱你",
     "今天,天气,好": "今天天气好",
     "我,吃,苹果": "我吃苹果",
-    "我,很,高兴,认识,你": "我很高兴认识你",
+    "认识,你,很,高兴": "认识你很高兴",
     "你,吃,了,不": "你吃了吗",
     "我,回,家": "我回家",
     "我,很,高兴": "我很高兴",
@@ -33,7 +33,7 @@ const comboMap = {
 // 预设句子列表
 const PRESET_SENTENCES = [
     '你好', '我喜欢你', '我爱你', '今天天气好', '我吃苹果',
-    '我很高兴认识你', '你吃了吗', '我回家',
+    '认识你很高兴', '你吃了吗', '我回家',
     '我很高兴', '你喜欢吃苹果吗'
 ];
 
@@ -188,33 +188,48 @@ function createTextParticles(text, color = '#ff3131') {
 }
 
 // ===== 核心显示逻辑 - 图片粒子汇聚 =====
-// 优先使用IMAGE_DATA中嵌入的图片（base64 data URL），没有才显示文字粒子效果
-// data URL不是跨域的，getImageData在file://和http://下都能正常工作
+// 图片查找顺序：
+//   1) IMAGE_DATA 内嵌 base64（data URL 不跨域，file:// 下也能 getImageData）
+//   2) 组词效果/ 文件夹下的同名 png（http:// 下可用）
+//   3) 都没有 → 文字粒子效果
 function transformToImage(imgName) {
     isAssembling = false;
     clearParticles();
     
     const baseName = imgName.replace('.png', '');
     
-    // 检查IMAGE_DATA中是否有对应图片
+    // 1) 内嵌 base64
     if (typeof IMAGE_DATA !== 'undefined' && IMAGE_DATA[baseName]) {
-        const newImg = new Image();
-        newImg.onload = () => {
-            initImageParticles(newImg);
+        loadAndShowParticles(IMAGE_DATA[baseName], baseName);
+        return;
+    }
+
+    // 2) 到 组词效果/ 文件夹查找同名图片
+    loadAndShowParticles(IMAGE_BASE + '/' + baseName + '.png', baseName);
+}
+
+// 加载图片并做粒子汇聚；加载失败或画布被污染时回退文字粒子
+function loadAndShowParticles(src, baseName) {
+    const img = new Image();
+    img.onload = () => {
+        try {
+            initImageParticles(img);
             isAssembling = true;
             clearTimeout(particleTimeout);
             particleTimeout = setTimeout(() => {
                 isAssembling = false;
             }, 8000);
-        };
-        newImg.onerror = () => {
+        } catch (e) {
+            // file:// 下文件夹图片会污染画布，getImageData 抛 SecurityError
+            console.warn('图片粒子失败，回退文字粒子:', e);
             createTextParticles(baseName);
-        };
-        newImg.src = IMAGE_DATA[baseName];
-    } else {
-        // 没有对应图片，使用文字粒子效果
+        }
+    };
+    img.onerror = () => {
+        console.warn('未找到图片 ' + src + '，使用文字粒子效果');
         createTextParticles(baseName);
-    }
+    };
+    img.src = src;
 }
 
 function hideImage() {
@@ -307,7 +322,11 @@ function onGestureDetected(gesture) {
     
     lastGestureWord = gesture;
     console.log('[手势检测] 处理新手势:', gesture);
-    addLog(`识别到手势: ${gesture}`);
+    // 判断识别来源
+    const isSLR500 = typeof SLR500_WORDS !== 'undefined' && SLR500_WORDS.includes(gesture);
+    const BASIC_WORDS = ['我','你','好','不','很','喜欢','回','天气','吃','饭','今天','爱','家','苹果','认识','高兴','了'];
+    const source = (isSLR500 && !BASIC_WORDS.includes(gesture)) ? ' [SLR500]' : '';
+    addLog(`识别到手势: ${gesture}${source}`);
     
     document.getElementById('current-gesture').textContent = gesture;
     
@@ -374,7 +393,15 @@ function preloadImages() {
 
 // ===== 初始化 =====
 async function init() {
-    console.log('手语识别交互系统 V2 启动中...');
+    console.log('手语识别交互系统 V3 启动中...');
+    
+    // 检查SLR500模板数据
+    if (typeof SLR500_WORDS !== 'undefined') {
+        console.log(`SLR500模板已加载: ${SLR500_WORDS.length} 个词汇`);
+        addLog(`SLR500词库已加载: ${SLR500_WORDS.length} 个词汇`);
+    } else {
+        console.warn('SLR500模板数据未加载');
+    }
     
     initParticleSystem();
     preloadImages();
@@ -385,6 +412,10 @@ async function init() {
     
     const recognizer = new GestureRecognizer();
     recognizer.onGestureResult = onGestureDetected;
+    recognizer.onError = (stage, message) => {
+        addLog(`${stage} 异常: ${message}`);
+        if (typeof window.__diag === 'function') window.__diag(`${stage}: ${message}`);
+    };
     
     try {
         await recognizer.init(videoEl, canvasEl);
@@ -399,11 +430,12 @@ async function init() {
     } catch (e) {
         console.error('手势识别初始化失败:', e);
         const loadingEl = document.getElementById('loading-screen');
+        if (typeof window.__diag === 'function') window.__diag(e.message);
         loadingEl.innerHTML = `
             <div class="loading-content">
                 <div class="loading-text" style="color: #e74c3c">初始化失败</div>
                 <div class="loading-subtext">${e.message}</div>
-                <div class="loading-subtext" style="margin-top: 20px">请确保允许摄像头权限</div>
+                <div class="loading-subtext" style="margin-top: 20px">请确保允许摄像头权限，并通过 http://localhost:8080 访问</div>
             </div>
         `;
     }
@@ -414,4 +446,11 @@ async function init() {
     });
 }
 
-window.addEventListener('load', init);
+// 用 DOMContentLoaded 而非 load：
+// load 会等待字体、图片等全部子资源就绪；一旦 fonts.googleapis.com 或 CDN 挂起，
+// init() 就永远不会执行，表现为“无骨骼、无识别”。
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
+} else {
+    init();
+}
