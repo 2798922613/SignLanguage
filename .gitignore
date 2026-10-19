@@ -12,7 +12,7 @@ build/
 slr500_words_joints/
 
 # 自建数据集：原始视频与骨骼预览体积大，不入库（骨骼 JSON 与 processed/ 需要入库）
-dataset/video/
+dataset/video/*.webm
 dataset/preview/
 
 # MediaPipe 离线依赖（约 74MB，执行 bash tools/fetch_vendor.sh 重新下载即可）
