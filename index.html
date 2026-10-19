@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>手语识别交互系统 - American Retro Collage</title>
-    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="style.css?v=20261009a">
     <!--
       字体改为非阻塞加载。
       fonts.googleapis.com 在国内网络下会长时间挂起，而 window 'load' 事件必须等所有
@@ -43,7 +43,7 @@
                 <span class="hint-tag">实时识别</span>
                 <span class="hint-tag">自动拼接</span>
                 <span class="hint-tag">句子匹配</span>
-                <span class="hint-tag">SLR500词库</span>
+                <span class="hint-tag">自建词库</span>
             </div>
         </div>
 
@@ -51,6 +51,8 @@
         <div id="word-queue-panel">
             <div class="dymo-label">WORD SEQUENCE</div>
             <div id="word-queue"></div>
+            <!-- 组句拆解：词序来自 dataset/词汇组句表.md 的「词序拆解」列 -->
+            <div id="word-queue-split"></div>
         </div>
 
         <!-- 数据面板 -->
@@ -77,6 +79,9 @@
 
     <!-- 运行时诊断面板：任何依赖/推理失败都会显示在这里，不再静默黑屏 -->
     <div id="diag-panel"></div>
+
+    <!-- 静态判据实时读数：手势不出图时看"最接近哪个词、差哪一维"。按 D 键隐藏/显示 -->
+    <div id="static-hud" style="display:none"></div>
 
     <!-- 加载屏幕 -->
     <div id="loading-screen">
@@ -113,22 +118,48 @@
         });
     </script>
 
-    <!-- MediaPipe Hands -->
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js"></script>
+    <!-- MediaPipe Hands / Pose：改成「本地 vendor 优先、CDN 兜底」异步加载（见 mp-loader.js）。
+         原来这里是 4 个写死的 jsdelivr CDN 标签：国内网络下 jsdelivr 会挂起十几秒甚至完全
+         不通，Hands/Pose 永远初始化不了，表现就是「摄像头亮了但一根骨骼都不画」，识别页还会
+         一直提示「静态判据：没拿到手+肩 → 请确认身体骨骼已开启」。
+         版本必须与 skeleton-recorder.html 钉的完全一致，否则两页 landmark 有系统性偏差，
+         录制页采的模板在识别页会整体对不上。 -->
+    <script src="mp-loader.js?v=20261009a"></script>
+    <script>
+        // 依赖变成异步加载了：script.js 的 init() 会先 await window.mpReady 再 new Hands/Pose，
+        // 否则 DOMContentLoaded 时 Hands 还没定义，会直接报「MediaPipe Hands 未加载」。
+        if (typeof window.mpLoadAll !== 'function') {
+            // 连 mp-loader.js 都没取到（文件被删/没走 localhost）：别把页面卡在"加载中"不动
+            window.__diag('mp-loader.js 未加载 → 请确认是通过 http://localhost:8080 打开的，且仓库根目录有 mp-loader.js');
+            window.mpReady = Promise.resolve(['mp-loader.js']);
+        } else {
+            window.mpReady = window.mpLoadAll(function (msg, isErr) {
+                var sub = document.getElementById('loading-subtext');
+                if (sub) sub.textContent = msg;
+                if (isErr && window.__diag) window.__diag(msg);
+            }).then(function (failed) {
+                if (failed && failed.length) {
+                    window.__diag('MediaPipe 依赖加载失败: ' + failed.join('、') +
+                        '（本地 vendor/ 不全且 CDN 不可达 → 在仓库根目录执行 bash tools/fetch_vendor.sh 后刷新）');
+                }
+                return failed;
+            });
+        }
+    </script>
 
     <!-- 图片数据（嵌入base64，解决file://协议跨域问题） -->
-    <script src="image-data.js"></script>
+    <script src="image-data.js?v=20261009a"></script>
 
-    <!-- SLR500 模板数据 -->
-    <script src="slr500-templates.js"></script>
+    <!-- 自建手语词库模板（由 tools/build_dataset.py 生成，替代 SLR500） -->
+    <script src="自建-templates.js?v=20261009a"></script>
+
+    <!-- 组句表（由 tools/build_sentences.py 从 dataset/词汇组句表.md 生成，必须在 script.js 之前） -->
+    <script src="sentences.js?v=20261009a"></script>
 
     <!-- 手势识别模块 -->
-    <script src="gesture-recognizer.js"></script>
+    <script src="gesture-recognizer.js?v=20261009a"></script>
 
     <!-- 主逻辑 -->
-    <script src="script.js"></script>
+    <script src="script.js?v=20261009a"></script>
 </body>
 </html>

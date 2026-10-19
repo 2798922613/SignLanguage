@@ -1,0 +1,1046 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>骨骼录制台 · 手语数据采集</title>
+<style>
+:root{
+  --bg:#0b0e13; --panel:#12171f; --panel2:#1a212c; --line:#253040;
+  --text:#e6edf7; --dim:#8b98ab; --accent:#00bfff;
+  --ok:#4ade80; --warn:#fbbf24; --err:#ff5c5c;
+}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{
+  background:var(--bg);color:var(--text);overflow:hidden;display:flex;flex-direction:column;
+  font:14px/1.6 -apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+}
+#banner{display:none;padding:8px 16px;background:#3a2a10;border-bottom:1px solid #7a5a1c;color:#ffe2ab;font-size:12.5px}
+#banner.on{display:block}
+#banner code{background:#00000040;padding:1px 5px;border-radius:3px}
+header{display:flex;align-items:center;gap:12px;padding:9px 16px;background:var(--panel);border-bottom:1px solid var(--line);flex:0 0 auto}
+header h1{font-size:15px;margin:0;font-weight:600;letter-spacing:.5px}
+header .sub{color:var(--dim);font-size:12px}
+.chips{margin-left:auto;display:flex;gap:7px;flex-wrap:wrap}
+.chip{font-size:11px;padding:2px 9px;border:1px solid var(--line);border-radius:999px;color:var(--dim);
+  background:var(--panel2);font-variant-numeric:tabular-nums;white-space:nowrap}
+.chip b{color:var(--text);font-weight:600}
+.chip.ok b{color:var(--ok)} .chip.err b{color:var(--err)}
+main{flex:1 1 auto;display:flex;min-height:0}
+#stage{flex:1 1 auto;position:relative;display:flex;align-items:center;justify-content:center;background:#000;min-width:0;overflow:hidden}
+#frame{position:relative;background:#000;box-shadow:0 0 0 1px #1c2430}
+#frame video,#frame canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
+#frame.mirrored video,#frame.mirrored canvas{transform:scaleX(-1)}
+#frame.hidecam video{opacity:0}
+#hud{position:absolute;left:10px;top:10px;z-index:3;pointer-events:none;
+  background:rgba(8,11,16,.6);border:1px solid rgba(255,255,255,.13);border-radius:6px;padding:6px 9px;
+  font:11px/1.8 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;color:#dbe6f5}
+#hud .k{color:#7f8da1;margin-right:5px}
+#hud .tag{color:#ffde59;font-weight:700}
+#recdot{position:absolute;right:10px;top:10px;z-index:3;display:none;align-items:center;gap:7px;
+  background:rgba(8,11,16,.6);border:1px solid rgba(255,90,90,.5);border-radius:6px;padding:4px 9px;
+  font:11px/1.7 ui-monospace,Menlo,monospace;color:#ffd7d7}
+#recdot.on{display:flex}
+#recdot i{width:8px;height:8px;border-radius:50%;background:#ff4d4d;animation:blink 1s infinite;flex:0 0 auto}
+@keyframes blink{50%{opacity:.15}}
+body.clean #hud,body.clean #recdot{display:none}
+#diag{position:absolute;left:50%;bottom:14px;transform:translateX(-50%);z-index:5;max-width:92%;display:none;
+  background:rgba(32,10,13,.94);border:1px solid #8c323c;border-radius:8px;padding:9px 12px;cursor:pointer;
+  font:12px/1.75 ui-monospace,Menlo,monospace;color:#ffd9dc}
+#diag.on{display:block}
+#diag .tip{color:#a98; font-size:11px;margin-top:4px}
+aside{flex:0 0 336px;background:var(--panel);border-left:1px solid var(--line);overflow-y:auto;padding:12px 13px 48px}
+.sec{border:1px solid var(--line);border-radius:8px;background:var(--panel2);margin-bottom:11px;overflow:hidden}
+.sec>h2{margin:0;padding:8px 11px;font-size:12px;letter-spacing:.6px;color:var(--dim);background:#151b25;
+  border-bottom:1px solid var(--line);font-weight:600;cursor:pointer;display:flex;justify-content:space-between;align-items:center;user-select:none}
+.sec>h2::after{content:'▾';font-size:10px}
+.sec.closed>h2{border-bottom:none}
+.sec.closed>h2::after{content:'▸'}
+.sec.closed .body{display:none}
+.body{padding:10px 11px}
+.row{display:flex;align-items:center;gap:8px;margin-bottom:9px}
+.row:last-child{margin-bottom:0}
+.row>label{flex:0 0 82px;color:var(--dim);font-size:12px}
+.row .fill{flex:1 1 auto;min-width:0}
+select,input[type=text]{width:100%;background:#0f141c;color:var(--text);border:1px solid var(--line);
+  border-radius:5px;padding:5px 7px;font-size:12px;font-family:inherit}
+input[type=range]{width:100%;accent-color:var(--accent)}
+.num{flex:0 0 42px;text-align:right;color:var(--text);font:11px ui-monospace,Menlo,monospace}
+button{background:#1e2836;color:var(--text);border:1px solid var(--line);border-radius:6px;padding:7px 11px;
+  font-size:12.5px;cursor:pointer;font-family:inherit}
+button:hover{background:#26313f;border-color:#33465e}
+button:disabled{opacity:.4;cursor:not-allowed}
+button.primary{background:#0d3a52;border-color:#1d6f96;color:#cdeeff}
+button.primary:hover{background:#114b68}
+button.danger{background:#4a1c22;border-color:#8c323c;color:#ffd9dc}
+button.on{background:#12432c;border-color:#2c7a52;color:#c9f5dd}
+.btns{display:flex;gap:7px;flex-wrap:wrap}
+.btns button{flex:1 1 auto}
+.checks{display:grid;grid-template-columns:1fr 1fr;gap:7px 10px}
+.checks label{display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer}
+.checks input{accent-color:var(--accent)}
+.hint{color:var(--dim);font-size:11.5px;line-height:1.7;margin-top:9px}
+.hint b{color:#b9c6d8;font-weight:600}
+kbd{background:#0f141c;border:1px solid var(--line);border-bottom-width:2px;border-radius:4px;padding:0 5px;
+  font:11px ui-monospace,Menlo,monospace;color:#cfe0f5}
+#recInfo{font:11.5px/1.7 ui-monospace,Menlo,monospace;color:var(--dim);margin-top:8px;min-height:18px}
+#recInfo.live{color:#ffd7d7}
+</style>
+</head>
+<body>
+<div id="banner"></div>
+
+<header>
+  <h1>骨骼录制台</h1>
+  <span class="sub">手语数据采集 · MediaPipe Hands(21点×2) + Pose(33点)</span>
+  <div class="chips">
+    <span class="chip" id="chipLib">依赖 <b>加载中</b></span>
+    <span class="chip" id="chipSrc">信号源 <b>—</b></span>
+    <span class="chip" id="chipRes">分辨率 <b>—</b></span>
+    <span class="chip" id="chipFps">FPS <b>—</b></span>
+    <span class="chip" id="chipHand">手 <b>0</b></span>
+    <span class="chip" id="chipPose">身体 <b>off</b></span>
+  </div>
+</header>
+
+<main>
+  <div id="stage">
+    <div id="frame">
+      <video id="video" playsinline muted></video>
+      <canvas id="overlay"></canvas>
+      <div id="hud">
+        <div><span class="k">LABEL</span><span class="tag" id="hudLabel">未命名</span></div>
+        <div><span class="k">FPS</span><span id="hudFps">--</span><span class="k" style="margin-left:10px">推理</span><span id="hudMs">--</span>ms</div>
+        <div><span class="k">FRAME</span><span id="hudFrame">0</span><span class="k" style="margin-left:10px">SIZE</span><span id="hudRes">--</span></div>
+        <div><span class="k">HANDS</span><span id="hudHands">0</span><span class="k" style="margin-left:10px">POSE</span><span id="hudPose">off</span></div>
+        <div id="hudFlagLine" style="display:none;color:#00ff8c"><span class="k">MODE</span><span id="hudFlag"></span></div>
+      </div>
+      <div id="recdot"><i></i><span id="recText">REC</span></div>
+    </div>
+    <div id="diag" title="点击关闭"></div>
+  </div>
+
+  <aside>
+    <div class="sec">
+      <h2>1 · 信号源</h2>
+      <div class="body">
+        <div class="row"><label>摄像头</label><div class="fill"><select id="selDevice"><option value="">默认设备</option></select></div></div>
+        <div class="row"><label>分辨率</label><div class="fill"><select id="selRes">
+          <option value="640x480">640 × 480</option>
+          <option value="1280x720" selected>1280 × 720（推荐）</option>
+          <option value="1920x1080">1920 × 1080</option>
+        </select></div></div>
+        <div class="row btns">
+          <button id="btnCam" class="primary">启动摄像头</button>
+          <button id="btnStop">停止</button>
+        </div>
+        <div class="row"><label>视频文件</label><div class="fill"><input type="file" id="fileInput" accept="video/*"></div></div>
+        <div class="row btns">
+          <button id="btnPlay" disabled>播放 / 暂停</button>
+          <button id="btnFull">全屏舞台 (F)</button>
+        </div>
+        <div class="hint">摄像头需通过 <b>http://localhost</b> 或 <b>https</b> 打开；视频文件模式无此限制。</div>
+      </div>
+    </div>
+
+    <div class="sec">
+      <h2>2 · 推理设置</h2>
+      <div class="body">
+        <div class="row"><label>手部模型</label><div class="fill"><select id="selHandCx">
+          <option value="1" selected>完整 (complexity 1)</option>
+          <option value="0">轻量 (complexity 0)</option>
+        </select></div></div>
+        <div class="row"><label>检测阈值</label><div class="fill"><input type="range" id="rngDetect" min="0.3" max="0.9" step="0.05" value="0.6"></div><span class="num" id="valDetect">0.60</span></div>
+        <div class="row"><label>跟踪阈值</label><div class="fill"><input type="range" id="rngTrack" min="0.3" max="0.9" step="0.05" value="0.5"></div><span class="num" id="valTrack">0.50</span></div>
+        <div class="row"><label>身体模型</label><div class="fill"><select id="selPose">
+          <option value="off">关闭（只要手）</option>
+          <option value="lite">Lite (0) · 最快</option>
+          <option value="full" selected>Full (1) · 推荐</option>
+          <option value="heavy">Heavy (2) · 最准最慢</option>
+        </select></div></div>
+        <div class="row"><label>身体频率</label><div class="fill"><select id="selPoseRate">
+          <option value="every" selected>每帧（与手同步，采集推荐）</option>
+          <option value="half">隔帧（省性能，导出时该帧 pose 为 null）</option>
+        </select></div></div>
+        <div class="hint">改阈值/模型会热更新，无需重启。采集数据建议 <b>1280×720 + 身体每帧</b>，FPS ≥ 20 即可。</div>
+      </div>
+    </div>
+
+    <div class="sec">
+      <h2>3 · 显示</h2>
+      <div class="body">
+        <div class="checks">
+          <label><input type="checkbox" id="chkMirror" checked>镜像显示</label>
+          <label><input type="checkbox" id="chkCamview" checked>摄像头画面</label>
+          <label><input type="checkbox" id="chkHands" checked>手部骨骼</label>
+          <label><input type="checkbox" id="chkPose" checked>身体骨骼</label>
+          <label><input type="checkbox" id="chkIndex">关键点编号</label>
+          <label><input type="checkbox" id="chkLabel" checked>左右手标签</label>
+          <label><input type="checkbox" id="chkGuides">参考线/构图框</label>
+          <label><input type="checkbox" id="chkHud" checked>画面内 HUD</label>
+        </div>
+        <div class="row" style="margin-top:10px"><label>骨骼粗细</label><div class="fill"><input type="range" id="rngLine" min="0.5" max="2.5" step="0.1" value="1"></div><span class="num" id="valLine">1.0</span></div>
+        <div class="row btns" style="margin-top:10px">
+          <button id="btnAlign">对齐自检 (T)</button>
+          <button id="btnFreeze">冻结帧 (Z)</button>
+        </div>
+        <div class="hint"><b>对齐自检</b>：画出归一化坐标 0→1 的绿框与 0.25/0.5/0.75 网格，以及 (0,0)(1,0)(0,1)(1,1)(0.5,0.5) 五个绿点。<b>绿框必须恰好压在视频画面的四条边上</b>（既不在画面内、也不超出），四个绿点必须落在画面四角——这就证明骨骼坐标到像素的映射是精确的。<br>
+        <b>冻结帧</b>：暂停推理、画面定格，方便逐点检查骨骼是否贴合手指关节。<br>
+        录屏前建议关掉 <b>参考线</b> 与 <b>HUD</b>（按 <kbd>H</kbd>），或直接 <kbd>F</kbd> 全屏舞台，画面里只剩视频与骨骼。</div>
+      </div>
+    </div>
+
+    <div class="sec">
+      <h2>4 · 采集与导出（可选）</h2>
+      <div class="body">
+        <div class="row"><label>词条标签</label><div class="fill"><input type="text" id="txtLabel" placeholder="例如：今天 / 天气 / 你好" maxlength="40"></div></div>
+        <div class="row btns">
+          <button id="btnJson">录制骨骼 JSON (R)</button>
+          <button id="btnWebm">录制合成视频 (V)</button>
+        </div>
+        <div id="recInfo">未在录制</div>
+        <div class="hint">
+          <b>骨骼 JSON</b>：逐帧导出 21×2 手点 + 33 身体点（归一化坐标，含 z 与 visibility），可直接用于训练/DTW，<b>免去录屏裁剪</b>。<br>
+          <b>合成视频</b>：浏览器内直接生成 视频+骨骼 叠加的 WebM（原始分辨率，无浏览器边框）。<br>
+          两者都不影响你自己录屏，按需使用。
+        </div>
+      </div>
+    </div>
+
+    <div class="sec closed">
+      <h2>5 · 快捷键与采集规范</h2>
+      <div class="body">
+        <div class="hint">
+          <kbd>Space</kbd> 启停摄像头 / 播放暂停视频　<kbd>M</kbd> 镜像　<kbd>H</kbd> 隐藏 HUD　<kbd>G</kbd> 参考线<br>
+          <kbd>I</kbd> 关键点编号　<kbd>F</kbd> 全屏舞台　<kbd>R</kbd> 骨骼 JSON　<kbd>V</kbd> 合成视频<br>
+          <kbd>T</kbd> 对齐自检　<kbd>Z</kbd> 冻结帧
+        </div>
+        <div class="hint">
+          <b>采集规范（保证后期可识别）</b><br>
+          · 机位固定：正对胸口，人占画面高度 60%–80%，双手全程在框内<br>
+          · 每词录 8–15 条，混入 快/慢、大幅/小幅、左手/右手 各若干条<br>
+          · 每条 1–2 秒，动作前后各留 0.3 秒静止，便于端点切分<br>
+          · 同一词分 2–3 个时段/衣物录制，避免模型记住背景<br>
+          · 命名：词_说话人_序号（如 今天_s01_003）
+        </div>
+      </div>
+    </div>
+  </aside>
+</main>
+
+<!-- MediaPipe 依赖：本地 vendor 优先、CDN 兜底，与 index.html 共用同一个加载器。
+     版本必须与 gesture-recognizer.js 钉的一致，否则录制页采的模板在识别页会整体对不上。 -->
+<script src="mp-loader.js?v=20261009a"></script>
+<script>
+'use strict';
+/* =====================================================================
+   骨骼录制台 —— 单文件采集页
+   目的：为自建手语数据集提供"骨骼显示准确、可直接录屏/导出"的采集前端。
+
+   与主项目 index.html 的一致性：
+     - 同样使用 @mediapipe/hands + @mediapipe/pose（legacy solutions API）
+     - 同样的 POSE_CONNECTIONS 33 点连接关系与配色（#00BFFF / #FF69B4 / #FFDE59 / #FF3131）
+     - 归一化坐标约定一致：x,y ∈ [0,1]，y 向下增大，z 为相对深度（负=更靠近摄像头）
+
+   相比主项目在"显示准确性"上的修正：
+     1. 画布不再是写死的 640×480 再被 CSS 拉伸（那样会因宽高比不一致导致骨骼整体偏移）；
+        这里让 #frame 严格锁定视频宽高比，画布 backing store 跟随显示尺寸×dpr，
+        绘制时直接用 归一化坐标 × 画布宽高，做到像素级对齐。
+     2. 手与身体在同一帧内先后推理、同一帧内一次性绘制，避免身体骨骼滞后于手。
+     3. 身体骨骼按 visibility 过滤（<0.35 不画），不会出现"穿墙"的假肢。
+     4. 可显示 21 点编号，便于肉眼核对关键点定义是否与识别代码一致；
+     5. 内置「对齐自检」图层（按 T）：直接把归一化坐标系 0→1 的边框与网格画出来，
+        绿框与视频四边重合即证明坐标映射零偏差，无需靠肉眼估算。
+   ===================================================================== */
+
+/* ---------- MediaPipe 版本锁定 + 双 CDN 兜底 ---------- */
+var MP_HANDS = { pkg: '@mediapipe/hands', ver: '0.4.1675469240', file: 'hands.js', global: 'Hands' };
+var MP_POSE  = { pkg: '@mediapipe/pose',  ver: '0.5.1675469404', file: 'pose.js',  global: 'Pose'  };
+// 顺序 = 尝试顺序：本地 vendor（由 tools/fetch_vendor.sh 下载，约 74MB，不进 git）→ 双 CDN。
+// 只有 mp-loader.js 自身没加载成功时才会走到这个数组。
+var CDN_BASES = ['vendor/mediapipe/npm', 'https://cdn.jsdelivr.net/npm', 'https://unpkg.com'];
+
+/* ---------- 手部连接：按五指分组着色 ---------- */
+var HAND_FINGERS = [
+  { name: '掌',   color: '#ffffff', links: [[0, 17]] },
+  { name: '拇指', color: '#ff6b6b', links: [[0, 1], [1, 2], [2, 3], [3, 4]] },
+  { name: '食指', color: '#ffd93d', links: [[0, 5], [5, 6], [6, 7], [7, 8]] },
+  { name: '中指', color: '#6bcb77', links: [[5, 9], [9, 10], [10, 11], [11, 12]] },
+  { name: '无名', color: '#4d96ff', links: [[9, 13], [13, 14], [14, 15], [15, 16]] },
+  { name: '小指', color: '#c780fa', links: [[13, 17], [17, 18], [18, 19], [19, 20]] }
+];
+
+/* ---------- MediaPipe Pose 33 点连接关系（与 gesture-recognizer.js 保持一致） ---------- */
+var POSE_CONNECTIONS = [
+  [0, 1], [1, 2], [2, 3], [3, 7],
+  [0, 4], [4, 5], [5, 6], [6, 8],
+  [9, 10],
+  [11, 12], [11, 23], [12, 24], [23, 24],
+  [11, 13], [13, 15],
+  [12, 14], [14, 16],
+  [15, 17], [15, 19], [17, 19], [19, 21],
+  [16, 18], [16, 20], [18, 20], [20, 22],
+  [23, 25], [25, 27], [27, 29], [27, 31], [29, 31],
+  [24, 26], [26, 28], [28, 30], [28, 32], [30, 32]
+];
+
+var POSE_VIS_MIN = 0.35;
+var MAX_REC_FRAMES = 20000;
+
+/* ---------- 运行状态 ---------- */
+var S = {
+  hands: null, pose: null, handsBase: null, poseBase: null,
+  ready: false, running: false, busy: false,
+  source: 'none', sourceName: '', stream: null, deviceId: '',
+  resolution: { w: 1280, h: 720 },
+  handComplexity: 1, handDetect: 0.6, handTrack: 0.5,
+  poseMode: 'full', poseEveryFrame: true,
+  mirror: true, showCam: true, showHands: true, showPose: true,
+  showIndex: false, showLabel: true, showGuides: false, showHud: true,
+  lineScale: 1,
+  alignTest: false, frozen: false,
+  frameIdx: 0, handRes: null, poseRes: null, poseFrame: -1,
+  fps: 0, inferMs: 0, _ts: [],
+  recJson: null, recWebm: null
+};
+
+function $(id) { return document.getElementById(id); }
+var video = $('video'), overlay = $('overlay'), ctx = overlay.getContext('2d');
+var frameEl = $('frame'), stageEl = $('stage'), comp = document.createElement('canvas');
+
+/* ---------- 诊断 ---------- */
+var seenDiag = {};
+function diag(msg, level) {
+  var key = level + '|' + msg;
+  if (seenDiag[key]) return;
+  seenDiag[key] = 1;
+  var box = $('diag');
+  var line = document.createElement('div');
+  line.textContent = (level === 'err' ? '✕ ' : '! ') + msg;
+  box.appendChild(line);
+  if (!box.querySelector('.tip')) {
+    var t = document.createElement('div');
+    t.className = 'tip'; t.textContent = '（点击此处关闭提示）';
+    box.appendChild(t);
+  }
+  box.classList.add('on');
+  if (level === 'err') console.error('[骨骼录制台] ' + msg); else console.warn('[骨骼录制台] ' + msg);
+}
+$('diag').addEventListener('click', function () {
+  this.innerHTML = ''; this.classList.remove('on'); seenDiag = {};
+});
+function setChip(id, text, cls) {
+  var el = $(id); if (!el) return;
+  var b = el.querySelector('b'); if (b) b.textContent = text;
+  el.className = 'chip' + (cls ? ' ' + cls : '');
+}
+function banner(html) { var b = $('banner'); b.innerHTML = html; b.classList.add('on'); }
+
+/* ---------- 脚本加载（本地 vendor 优先，CDN 兜底） ---------- */
+function loadScript(url) {
+  return new Promise(function (resolve, reject) {
+    var s = document.createElement('script');
+    s.src = url; s.async = true;
+    s.onload = function () { resolve(url); };
+    s.onerror = function () { reject(new Error(url)); };
+    document.head.appendChild(s);
+  });
+}
+/** 加载器回调：错误进诊断框，进度只写 console（否则诊断框会被"加载中"刷屏） */
+function mpLog(msg, isErr) {
+  if (isErr) diag(msg, 'err'); else console.log('[依赖] ' + msg);
+}
+async function loadPackage(spec) {
+  // 正常路径：走共用的 mp-loader.js。它会先试本地 vendor，并逐个探测模型/wasm 是否齐全，
+  // 缺文件就自动换源——不会出现"js 加载了、tflite 却 404"这种查不出来的半死状态。
+  if (typeof window.mpLoadPackage === 'function') {
+    var shared = (typeof window.mpSpecOf === 'function' && window.mpSpecOf(spec.pkg)) || spec;
+    var okBase = await window.mpLoadPackage(shared, mpLog);
+    if (okBase) return okBase;
+    diag(spec.file + ' 本地 vendor 与 jsdelivr/unpkg 全部取不到 → 执行 bash tools/fetch_vendor.sh', 'err');
+    return null;
+  }
+  // 兜底路径：mp-loader.js 自身没加载到时，仍按老逻辑逐源尝试
+  for (var i = 0; i < CDN_BASES.length; i++) {
+    var base = CDN_BASES[i];
+    var url = base + '/' + spec.pkg + '@' + spec.ver + '/' + spec.file;
+    try {
+      await loadScript(url);
+      if (typeof window[spec.global] === 'function') return base;
+      diag(spec.file + ' 已加载但未定义 ' + spec.global, 'err');
+    } catch (e) {
+      diag('源不可达，切换下一个：' + base);
+    }
+  }
+  return null;
+}
+
+/* ---------- 初始化模型 ---------- */
+async function initModels() {
+  S.handsBase = await loadPackage(MP_HANDS);
+  if (!S.handsBase) {
+    setChip('chipLib', '加载失败', 'err');
+    diag('MediaPipe Hands 加载失败：本地 vendor/ 不全，且 jsdelivr 与 unpkg 均不可达 → 在仓库根目录执行 bash tools/fetch_vendor.sh 下载离线依赖后刷新本页。', 'err');
+    return;
+  }
+  S.hands = new Hands({ locateFile: function (f) { return S.handsBase + '/' + MP_HANDS.pkg + '@' + MP_HANDS.ver + '/' + f; } });
+  S.hands.setOptions({
+    maxNumHands: 2,
+    modelComplexity: S.handComplexity,
+    minDetectionConfidence: S.handDetect,
+    minTrackingConfidence: S.handTrack
+  });
+  S.hands.onResults(function (r) { S.handRes = r; });
+
+  S.poseBase = await loadPackage(MP_POSE);
+  if (S.poseBase) {
+    try {
+      S.pose = new Pose({ locateFile: function (f) { return S.poseBase + '/' + MP_POSE.pkg + '@' + MP_POSE.ver + '/' + f; } });
+      applyPoseOptions();
+      S.pose.onResults(function (r) { S.poseRes = r; S.poseFrame = S.frameIdx; });
+    } catch (e) {
+      S.pose = null;
+      diag('Pose 初始化失败：' + (e.message || e), 'err');
+    }
+  } else {
+    S.poseMode = 'off';
+    diag('MediaPipe Pose 加载失败，本次仅显示手部骨骼（这就是"身体骨骼没开启"的原因：pose.js 或它的模型没取到）', 'err');
+  }
+
+  S.ready = true;
+  setChip('chipLib', '已就绪', 'ok');
+  syncPoseChip();
+  startLoop();
+}
+function applyPoseOptions() {
+  if (!S.pose) return;
+  var map = { lite: 0, full: 1, heavy: 2 };
+  var c = map[S.poseMode]; if (c === undefined) c = 1;
+  S.pose.setOptions({
+    modelComplexity: c,
+    smoothLandmarks: true,
+    enableSegmentation: false,
+    minDetectionConfidence: 0.5,
+    minTrackingConfidence: 0.5
+  });
+}
+function applyHandsOptions() {
+  if (!S.hands) return;
+  S.hands.setOptions({
+    maxNumHands: 2,
+    modelComplexity: S.handComplexity,
+    minDetectionConfidence: S.handDetect,
+    minTrackingConfidence: S.handTrack
+  });
+}
+
+/* ---------- 主循环：一帧内先手后身体，再统一绘制 ---------- */
+function startLoop() { if (!S.running) { S.running = true; requestAnimationFrame(tick); } }
+async function tick() {
+  if (!S.running) return;
+  requestAnimationFrame(tick);
+  if (S.busy || !S.ready) return;
+  if (S.frozen) return;
+  if (video.readyState < 2 || !video.videoWidth) return;
+  if (S.source === 'file' && video.paused) return;
+
+  S.busy = true;
+  var t0 = performance.now();
+  S.frameIdx++;
+  try { await S.hands.send({ image: video }); }
+  catch (e) { diag('Hands 推理异常：' + (e.message || e), 'err'); }
+
+  if (S.pose && S.poseMode !== 'off' && (S.poseEveryFrame || S.frameIdx % 2 === 0)) {
+    try { await S.pose.send({ image: video }); }
+    catch (e) { diag('Pose 推理异常：' + (e.message || e), 'err'); }
+  }
+
+  draw();
+  if (S.recJson) captureLandmarks();
+  S.busy = false;
+  trackFps(t0);
+  updateHud();
+}
+function trackFps(t0) {
+  var now = performance.now();
+  S._ts.push(now);
+  while (S._ts.length && now - S._ts[0] > 1000) S._ts.shift();
+  S.fps = S._ts.length;
+  S.inferMs = Math.round(now - t0);
+}
+
+/* ---------- 尺寸对齐：#frame 锁定视频宽高比，画布 backing store 跟随显示尺寸 ---------- */
+function fitFrame() {
+  var st = stageEl.getBoundingClientRect();
+  if (st.width < 4 || st.height < 4) return;
+  var vw = video.videoWidth, vh = video.videoHeight;
+  var ar = (vw && vh) ? vw / vh : 4 / 3;
+  var w = st.width, h = w / ar;
+  if (h > st.height) { h = st.height; w = h * ar; }
+  w = Math.round(w); h = Math.round(h);
+  frameEl.style.width = w + 'px';
+  frameEl.style.height = h + 'px';
+  var dpr = Math.min(window.devicePixelRatio || 1, 2);
+  var cw = Math.max(2, Math.round(w * dpr)), ch = Math.max(2, Math.round(h * dpr));
+  if (overlay.width !== cw || overlay.height !== ch) { overlay.width = cw; overlay.height = ch; }
+  draw();
+}
+
+/* ---------- 绘制 ---------- */
+function draw() {
+  var cw = overlay.width, ch = overlay.height;
+  ctx.clearRect(0, 0, cw, ch);
+  var u = (cw / 640) * S.lineScale;          // 与显示尺寸成正比的线宽单位
+  if (S.showGuides) drawGuides(cw, ch, u);
+  if (S.showPose && S.poseRes && S.poseRes.poseLandmarks) drawPose(S.poseRes.poseLandmarks, cw, ch, u);
+  if (S.showHands && S.handRes && S.handRes.multiHandLandmarks) drawHands(cw, ch, u);
+  if (S.alignTest) drawAlignTest(cw, ch, u);
+}
+function vis(p) { return (p && typeof p.visibility === 'number') ? p.visibility : 1; }
+
+function drawGuides(cw, ch, u) {
+  ctx.save();
+  ctx.strokeStyle = 'rgba(255,255,255,.20)';
+  ctx.lineWidth = 1 * u;
+  ctx.setLineDash([6 * u, 6 * u]);
+  [1 / 3, 2 / 3].forEach(function (p) {
+    ctx.beginPath(); ctx.moveTo(cw * p, 0); ctx.lineTo(cw * p, ch); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(0, ch * p); ctx.lineTo(cw, ch * p); ctx.stroke();
+  });
+  ctx.setLineDash([]);
+  ctx.strokeStyle = 'rgba(0,191,255,.55)';
+  ctx.beginPath();
+  ctx.moveTo(cw / 2 - 14 * u, ch / 2); ctx.lineTo(cw / 2 + 14 * u, ch / 2);
+  ctx.moveTo(cw / 2, ch / 2 - 14 * u); ctx.lineTo(cw / 2, ch / 2 + 14 * u);
+  ctx.stroke();
+  ctx.strokeStyle = 'rgba(255,255,255,.16)';
+  var m = Math.round(cw * 0.04);
+  ctx.strokeRect(m, m, cw - 2 * m, ch - 2 * m);
+  ctx.restore();
+}
+
+function drawPose(lm, cw, ch, u) {
+  ctx.save();
+  ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+  for (var i = 0; i < POSE_CONNECTIONS.length; i++) {
+    var a = lm[POSE_CONNECTIONS[i][0]], b = lm[POSE_CONNECTIONS[i][1]];
+    if (!a || !b) continue;
+    var v = Math.min(vis(a), vis(b));
+    if (v < POSE_VIS_MIN) continue;
+    ctx.strokeStyle = 'rgba(0,191,255,' + (0.25 + 0.7 * v).toFixed(3) + ')';
+    ctx.lineWidth = 2.4 * u;
+    ctx.beginPath(); ctx.moveTo(a.x * cw, a.y * ch); ctx.lineTo(b.x * cw, b.y * ch); ctx.stroke();
+  }
+  for (var j = 0; j < lm.length; j++) {
+    var p = lm[j]; if (!p) continue;
+    var vp = vis(p); if (vp < POSE_VIS_MIN) continue;
+    ctx.fillStyle = 'rgba(255,105,180,' + (0.3 + 0.7 * vp).toFixed(3) + ')';
+    ctx.beginPath(); ctx.arc(p.x * cw, p.y * ch, (j <= 10 ? 1.7 : 3.0) * u, 0, 6.2832); ctx.fill();
+  }
+  ctx.restore();
+}
+
+function drawHands(cw, ch, u) {
+  var list = S.handRes.multiHandLandmarks;
+  var handed = S.handRes.multiHandedness || [];
+  ctx.save();
+  ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+  for (var h = 0; h < list.length; h++) {
+    var lm = list[h];
+    if (!lm || lm.length < 21) continue;
+    for (var f = 0; f < HAND_FINGERS.length; f++) {
+      var fg = HAND_FINGERS[f];
+      ctx.strokeStyle = fg.color; ctx.lineWidth = 2.8 * u;
+      ctx.beginPath();
+      for (var k = 0; k < fg.links.length; k++) {
+        var a = lm[fg.links[k][0]], b = lm[fg.links[k][1]];
+        ctx.moveTo(a.x * cw, a.y * ch); ctx.lineTo(b.x * cw, b.y * ch);
+      }
+      ctx.stroke();
+    }
+    for (var i = 0; i < 21; i++) {
+      var p = lm[i], r = (i === 0 ? 3.6 : 2.6) * u;
+      ctx.fillStyle = '#ffffff';
+      ctx.beginPath(); ctx.arc(p.x * cw, p.y * ch, r, 0, 6.2832); ctx.fill();
+      ctx.fillStyle = '#ff3131';
+      ctx.beginPath(); ctx.arc(p.x * cw, p.y * ch, r * 0.55, 0, 6.2832); ctx.fill();
+      if (S.showIndex) {
+        ctx.fillStyle = 'rgba(255,255,255,.92)';
+        ctx.font = (9 * u) + 'px ui-monospace,Menlo,monospace';
+        ctx.textBaseline = 'alphabetic';
+        ctx.fillText(String(i), p.x * cw + 4 * u, p.y * ch - 4 * u);
+      }
+    }
+    if (S.showLabel) {
+      var info = handed[h], name = 'Hand', score = '';
+      if (info && info.label) {
+        name = S.mirror ? (info.label === 'Left' ? 'Right' : 'Left') : info.label;
+        score = (info.score != null) ? ' ' + Math.round(info.score * 100) + '%' : '';
+      }
+      labelBox(name + score, lm[0].x * cw, lm[0].y * ch + 16 * u, u);
+    }
+  }
+  ctx.restore();
+}
+function labelBox(text, x, y, u) {
+  ctx.font = '600 ' + (11 * u) + 'px ui-monospace,Menlo,monospace';
+  var w = ctx.measureText(text).width + 9 * u, h = 15 * u;
+  var bx = Math.max(2, Math.min(overlay.width - w - 2, x - w / 2));
+  var by = Math.min(overlay.height - h - 2, Math.max(2, y));
+  ctx.fillStyle = 'rgba(255,222,89,.95)';
+  if (ctx.roundRect) { ctx.beginPath(); ctx.roundRect(bx, by, w, h, 3 * u); ctx.fill(); }
+  else ctx.fillRect(bx, by, w, h);
+  ctx.fillStyle = '#1a1400';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(text, bx + 4.5 * u, by + h / 2 + 0.5 * u);
+}
+
+/* ---------- 对齐自检：把归一化坐标系本身画出来，用于验证骨骼↔像素映射 ---------- */
+function drawAlignTest(cw, ch, u) {
+  ctx.save();
+  var C = 'rgba(0,255,140,.95)';
+  ctx.strokeStyle = C;
+  ctx.lineWidth = Math.max(1, 1.5 * u);
+  var o = ctx.lineWidth / 2;
+  // 归一化 (0,0)→(1,1) 的四边：绿带外沿应与画布/视频边缘完全重合
+  ctx.strokeRect(o, o, cw - ctx.lineWidth, ch - ctx.lineWidth);
+  ctx.setLineDash([4 * u, 4 * u]);
+  ctx.strokeStyle = 'rgba(0,255,140,.40)';
+  ctx.lineWidth = Math.max(1, 1 * u);
+  [0.25, 0.5, 0.75].forEach(function (q) {
+    ctx.beginPath(); ctx.moveTo(cw * q, 0); ctx.lineTo(cw * q, ch); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(0, ch * q); ctx.lineTo(cw, ch * q); ctx.stroke();
+  });
+  ctx.setLineDash([]);
+  ctx.fillStyle = C;
+  [[0, 0], [1, 0], [0, 1], [1, 1], [0.5, 0.5]].forEach(function (q) {
+    ctx.beginPath(); ctx.arc(q[0] * cw, q[1] * ch, 3.5 * u, 0, 6.2832); ctx.fill();
+  });
+  ctx.restore();
+}
+function syncFlags() {
+  $('btnAlign').classList.toggle('on', S.alignTest);
+  $('btnFreeze').classList.toggle('on', S.frozen);
+  var bits = [];
+  if (S.frozen) bits.push('冻结帧（推理已暂停）');
+  if (S.alignTest) bits.push('对齐自检：绿框须恰好压在画面四边');
+  $('hudFlag').textContent = bits.join('　|　');
+  $('hudFlagLine').style.display = bits.length ? 'block' : 'none';
+}
+
+/* ---------- HUD ---------- */
+function updateHud() {
+  var hn = (S.handRes && S.handRes.multiHandLandmarks) ? S.handRes.multiHandLandmarks.length : 0;
+  $('hudFps').textContent = S.fps || '--';
+  $('hudMs').textContent = S.inferMs || '--';
+  $('hudFrame').textContent = S.frameIdx;
+  $('hudHands').textContent = hn;
+  $('hudRes').textContent = (video.videoWidth || '--') + '×' + (video.videoHeight || '--');
+  var poseOn = S.pose && S.poseMode !== 'off';
+  var poseTxt = !poseOn ? 'off' : ((S.poseRes && S.poseRes.poseLandmarks) ? 'on' : 'lost');
+  $('hudPose').textContent = poseTxt;
+  setChip('chipFps', S.fps || '--', S.fps >= 20 ? 'ok' : (S.fps > 0 ? '' : ''));
+  setChip('chipHand', hn, hn > 0 ? 'ok' : '');
+  setChip('chipPose', poseTxt, poseTxt === 'on' ? 'ok' : (poseTxt === 'lost' ? 'err' : ''));
+  if (S.recJson || S.recWebm) updateRecInfo();
+}
+function syncPoseChip() {
+  setChip('chipPose', (S.pose && S.poseMode !== 'off') ? '待命' : 'off');
+}
+
+/* ---------- 信号源 ---------- */
+async function startCamera(retry) {
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    diag('当前浏览器不支持 getUserMedia，请改用 Chrome / Edge，或通过 http://localhost 打开。', 'err');
+    setChip('chipSrc', '不支持', 'err');
+    return;
+  }
+  stopSource();
+  var cons = { audio: false, video: {
+    width: { ideal: S.resolution.w }, height: { ideal: S.resolution.h }, facingMode: 'user'
+  } };
+  if (S.deviceId) cons.video.deviceId = { exact: S.deviceId };
+  try {
+    var st = await navigator.mediaDevices.getUserMedia(cons);
+    S.stream = st; S.source = 'camera'; S.sourceName = 'camera';
+    video.srcObject = st; video.loop = false;
+    await video.play();
+    onSourceReady();
+  } catch (e) {
+    var n = e && e.name;
+    if (n === 'OverconstrainedError' && !retry) {
+      diag('所选设备/分辨率不被支持，已回退默认设备重试');
+      S.deviceId = ''; $('selDevice').value = '';
+      return startCamera(true);
+    }
+    if (n === 'NotAllowedError') diag('摄像头权限被拒绝。点击地址栏左侧的权限图标允许摄像头，然后按 Space 或点「启动摄像头」。', 'err');
+    else if (n === 'NotFoundError') diag('未检测到摄像头。可改用「视频文件」输入。', 'err');
+    else if (n === 'NotReadableError') diag('摄像头被其他程序占用（如腾讯会议/Zoom），请关闭后重试。', 'err');
+    else if (n === 'SecurityError') diag('浏览器拒绝访问摄像头：必须通过 http://localhost 或 https 打开本页面。', 'err');
+    else diag('摄像头启动失败：' + ((e && e.message) || e), 'err');
+    setChip('chipSrc', '无信号', 'err');
+  }
+}
+function stopSource() {
+  if (S.stream) { S.stream.getTracks().forEach(function (t) { t.stop(); }); S.stream = null; }
+  if (S.source === 'file') { try { video.pause(); } catch (e) {} }
+  video.srcObject = null;
+  if (video.getAttribute('src')) { video.removeAttribute('src'); video.load(); }
+  S.source = 'none'; S.sourceName = '';
+  S.handRes = null; S.poseRes = null; S.poseFrame = -1;
+  setChip('chipSrc', '—'); setChip('chipFps', '—');
+  $('btnPlay').disabled = true;
+  draw();
+}
+function onSourceReady() {
+  fitFrame();
+  setChip('chipSrc', S.source === 'camera' ? '摄像头' : '视频文件', 'ok');
+  setChip('chipRes', video.videoWidth + '×' + video.videoHeight);
+  $('btnPlay').disabled = (S.source !== 'file');
+  if (S.source === 'camera') listDevices();
+  startLoop();
+}
+async function listDevices() {
+  try {
+    var devs = await navigator.mediaDevices.enumerateDevices();
+    var cams = devs.filter(function (d) { return d.kind === 'videoinput'; });
+    var sel = $('selDevice'), cur = S.deviceId;
+    sel.innerHTML = '';
+    var opt0 = document.createElement('option');
+    opt0.value = ''; opt0.textContent = cams.length ? '默认设备' : '未检测到摄像头';
+    sel.appendChild(opt0);
+    cams.forEach(function (d, i) {
+      var o = document.createElement('option');
+      o.value = d.deviceId;
+      o.textContent = d.label || ('摄像头 ' + (i + 1));
+      sel.appendChild(o);
+    });
+    sel.value = cur;
+  } catch (e) { /* 忽略：设备列表非关键路径 */ }
+}
+function openFile(f) {
+  if (!f) return;
+  stopSource();
+  S.source = 'file'; S.sourceName = f.name;
+  video.srcObject = null;
+  video.src = URL.createObjectURL(f);
+  video.loop = true;
+  var p = video.play();
+  if (p && p.catch) p.catch(function (e) { diag('视频播放失败：' + (e.message || e), 'err'); });
+  $('btnPlay').disabled = false;
+  onSourceReady();
+  diag('已载入视频文件：' + f.name + '（循环播放，可用「播放/暂停」逐段录制）');
+}
+function togglePlay() {
+  if (S.source !== 'file') return;
+  if (video.paused) video.play(); else video.pause();
+}
+
+/* ---------- 骨骼 JSON 录制 ---------- */
+function r4(v) { return Math.round((v || 0) * 1e4) / 1e4; }
+function r3(v) { return Math.round((v == null ? 1 : v) * 1e3) / 1e3; }
+function stamp() {
+  var d = new Date(), p = function (n) { return String(n).padStart(2, '0'); };
+  return d.getFullYear() + p(d.getMonth() + 1) + p(d.getDate()) + '_' + p(d.getHours()) + p(d.getMinutes()) + p(d.getSeconds());
+}
+function safeName(s) { return String(s || 'clip').replace(/[\\/:*?"<>|\s]+/g, '_').slice(0, 40) || 'clip'; }
+function downloadBlob(blob, name) {
+  var a = document.createElement('a');
+  a.href = URL.createObjectURL(blob); a.download = name;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(function () { URL.revokeObjectURL(a.href); }, 3000);
+}
+function toggleJsonRec() {
+  if (S.recJson) stopJsonRec(); else startJsonRec();
+}
+function startJsonRec() {
+  if (S.source === 'none') { diag('请先启动摄像头或载入视频文件', 'err'); return; }
+  S.recJson = { t0: performance.now(), frames: [], fpsSum: 0, fpsN: 0 };
+  $('btnJson').classList.add('on');
+  $('btnJson').textContent = '停止并下载 JSON (R)';
+  $('recdot').classList.add('on');
+  syncRecText();
+  updateRecInfo();
+}
+function stopJsonRec(overflow, fixedBase) {
+  var rec = S.recJson; S.recJson = null;
+  $('btnJson').classList.remove('on');
+  $('btnJson').textContent = '录制骨骼 JSON (R)';
+  syncRecText();
+  if (!rec || !rec.frames.length) { $('recInfo').textContent = '未采到帧，已取消'; $('recInfo').className = ''; return; }
+  var payload = {
+    format: 'signlanguage-skeleton-v1',
+    createdAt: new Date().toISOString(),
+    label: $('txtLabel').value.trim() || '未命名',
+    source: { type: S.source, name: S.sourceName || null,
+              width: video.videoWidth, height: video.videoHeight, mirrored: S.mirror },
+    options: {
+      hands: { maxNumHands: 2, modelComplexity: S.handComplexity,
+               minDetectionConfidence: S.handDetect, minTrackingConfidence: S.handTrack },
+      pose: { enabled: !!(S.pose && S.poseMode !== 'off'), mode: S.poseMode, everyFrame: S.poseEveryFrame }
+    },
+    coordSpec: {
+      space: '归一化坐标，原点为原始（未镜像）视频帧左上角，x 向右、y 向下，范围 [0,1]；z 为相对深度，负值更靠近摄像头',
+      hands: 'MediaPipe Hands 21 点/手，顺序与 HAND_CONNECTIONS 一致；label 为 MediaPipe 原始左右手标签（未做镜像翻转）',
+      pose: 'MediaPipe Pose 33 点，第 4 个分量为 visibility；pose 为 null 表示该帧未做身体推理或未检测到',
+      units: 't 为相对录制起点的毫秒数；vt 为视频文件模式下的 currentTime（秒）'
+    },
+    avgFps: rec.fpsN ? Math.round(rec.fpsSum / rec.fpsN * 10) / 10 : null,
+    durationMs: Math.round(performance.now() - rec.t0),
+    frameCount: rec.frames.length,
+    frames: rec.frames
+  };
+  var name = (fixedBase || (safeName(payload.label) + '_' + stamp() + (overflow ? '_overflow' : ''))) + '.json';
+  downloadBlob(new Blob([JSON.stringify(payload)], { type: 'application/json' }), name);
+  $('recInfo').textContent = '已导出 ' + name + '（' + rec.frames.length + ' 帧 / ' + (payload.durationMs / 1000).toFixed(1) + 's）';
+  $('recInfo').className = '';
+}
+function captureLandmarks() {
+  var rec = S.recJson;
+  if (rec.frames.length >= MAX_REC_FRAMES) {
+    diag('骨骼录制达到 ' + MAX_REC_FRAMES + ' 帧上限，已自动停止并导出', 'err');
+    stopJsonRec(true);
+    return;
+  }
+  rec.fpsSum += S.fps; rec.fpsN++;
+  var f = { i: S.frameIdx, t: Math.round(performance.now() - rec.t0) };
+  if (S.handRes && S.handRes.multiHandLandmarks) {
+    f.hands = S.handRes.multiHandLandmarks.map(function (lm, hi) {
+      var info = (S.handRes.multiHandedness || [])[hi] || {};
+      return {
+        label: info.label || null,
+        score: info.score != null ? r3(info.score) : null,
+        pts: lm.map(function (p) { return [r4(p.x), r4(p.y), r4(p.z)]; })
+      };
+    });
+  } else f.hands = [];
+  f.pose = (S.poseRes && S.poseRes.poseLandmarks && S.poseFrame === S.frameIdx)
+    ? S.poseRes.poseLandmarks.map(function (p) { return [r4(p.x), r4(p.y), r4(p.z), r3(p.visibility)]; })
+    : null;
+  if (S.source === 'file') f.vt = Math.round(video.currentTime * 1000) / 1000;
+  rec.frames.push(f);
+}
+
+/* ---------- 合成视频录制（WebM） ---------- */
+function toggleWebmRec() { if (S.recWebm) stopWebmRec(); else startWebmRec(); }
+function startWebmRec() {
+  if (S.source === 'none') { diag('请先启动摄像头或载入视频文件', 'err'); return; }
+  if (typeof MediaRecorder !== 'function') { diag('当前浏览器不支持 MediaRecorder，请用录屏方式代替', 'err'); return; }
+  if (!comp.captureStream) { diag('当前浏览器不支持 canvas.captureStream，请用录屏方式代替', 'err'); return; }
+  var mime = ['video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm', 'video/mp4']
+    .filter(function (m) { try { return MediaRecorder.isTypeSupported(m); } catch (e) { return false; } })[0];
+  if (!mime) { diag('没有可用的视频编码格式，请用录屏方式代替', 'err'); return; }
+  comp.width = video.videoWidth; comp.height = video.videoHeight;
+  var cctx = comp.getContext('2d');
+  var stream = comp.captureStream(30), chunks = [];
+  // 导出文件名在 stopWebmRec 里回填。必须走这个闭包对象而不是 S.recWebm：
+  // 停止后 S.recWebm 要立刻清空，否则 toggleWebmRec 永远走 stop 分支，V 无法开始下一条。
+  var saved = { base: null };
+  var mr;
+  try { mr = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: 8000000 }); }
+  catch (e) { diag('MediaRecorder 启动失败：' + (e.message || e), 'err'); return; }
+  mr.ondataavailable = function (e) { if (e.data && e.data.size) chunks.push(e.data); };
+  mr.onstop = function () {
+    var ext = mime.indexOf('mp4') >= 0 ? '.mp4' : '.webm';
+    var name = (saved.base || safeName($('txtLabel').value.trim() || 'clip') + '_' + stamp()) + ext;
+    downloadBlob(new Blob(chunks, { type: mime }), name);
+    try { stream.getTracks().forEach(function (t) { t.stop(); }); } catch (e) {}
+    $('recInfo').textContent = '已导出 ' + name + '　可再按 V 录下一条';
+    $('recInfo').className = '';
+  };
+  if (!S.recJson) startJsonRec();   // V 同时采集骨骼 JSON（与视频同名）
+  mr.start(250);
+  var timer = setInterval(function () {
+    cctx.save();
+    cctx.fillStyle = '#000';
+    cctx.fillRect(0, 0, comp.width, comp.height);
+    if (S.mirror) { cctx.translate(comp.width, 0); cctx.scale(-1, 1); }
+    if (S.showCam) cctx.drawImage(video, 0, 0, comp.width, comp.height);
+    cctx.drawImage(overlay, 0, 0, comp.width, comp.height);
+    cctx.restore();
+  }, 1000 / 30);
+  S.recWebm = { mr: mr, timer: timer, t0: Date.now(), saved: saved };
+  $('btnWebm').classList.add('on');
+  $('btnWebm').textContent = '停止并下载视频 (V)';
+  $('recdot').classList.add('on');
+  syncRecText();
+  updateRecInfo();
+}
+function stopWebmRec() {
+  var rec = S.recWebm;
+  if (!rec) return;
+  S.recWebm = null;   // 先清状态：这样按 V 才能开始新的一条（旧代码在下方又把 rec 赋回去，页面会一直停在"录制中"）
+  clearInterval(rec.timer);
+  // 视频与骨骼 JSON 同名成对导出：JSON 为实时 JS 域 landmark，是建模板的正确数据源
+  var base = safeName($('txtLabel').value.trim() || 'clip') + '_' + stamp();
+  if (rec.saved) rec.saved.base = base;
+  if (S.recJson) stopJsonRec(false, base);
+  try { rec.mr.stop(); } catch (e) {}
+  $('btnWebm').classList.remove('on');
+  $('btnWebm').textContent = '录制合成视频 (V)';
+  syncRecText();
+}
+function syncRecText() {
+  var parts = [];
+  if (S.recJson) parts.push('骨骼 JSON');
+  if (S.recWebm) parts.push('合成视频');
+  var on = parts.length > 0;
+  $('recdot').classList.toggle('on', on);
+  $('recText').textContent = on ? 'REC · ' + parts.join(' + ') : 'REC';
+}
+function updateRecInfo() {
+  var el = $('recInfo'), bits = [];
+  if (S.recJson) {
+    var sec = (performance.now() - S.recJson.t0) / 1000;
+    bits.push('骨骼 ' + S.recJson.frames.length + ' 帧 / ' + sec.toFixed(1) + 's');
+  }
+  if (S.recWebm) bits.push('视频 ' + ((Date.now() - S.recWebm.t0) / 1000).toFixed(1) + 's');
+  el.textContent = bits.length ? ('● 录制中：' + bits.join('　')) : '未在录制';
+  el.className = bits.length ? 'live' : '';
+}
+
+/* ---------- 显示开关 ---------- */
+function applyDisplay() {
+  frameEl.classList.toggle('mirrored', S.mirror);
+  frameEl.classList.toggle('hidecam', !S.showCam);
+  document.body.classList.toggle('clean', !S.showHud);
+  $('chkMirror').checked = S.mirror;
+  $('chkCamview').checked = S.showCam;
+  $('chkHands').checked = S.showHands;
+  $('chkPose').checked = S.showPose;
+  $('chkIndex').checked = S.showIndex;
+  $('chkLabel').checked = S.showLabel;
+  $('chkGuides').checked = S.showGuides;
+  $('chkHud').checked = S.showHud;
+  var lb = $('txtLabel').value.trim();
+  $('hudLabel').textContent = lb || '未命名';
+  draw();
+}
+function bindCheck(id, key) {
+  $(id).addEventListener('change', function () { S[key] = this.checked; applyDisplay(); });
+}
+
+/* ---------- 全屏 ---------- */
+function toggleFullscreen() {
+  if (document.fullscreenElement) { if (document.exitFullscreen) document.exitFullscreen(); }
+  else if (stageEl.requestFullscreen) stageEl.requestFullscreen();
+  else diag('当前浏览器不支持全屏 API', 'err');
+}
+
+/* ---------- 事件绑定 ---------- */
+function wire() {
+  $('selDevice').addEventListener('change', function () { S.deviceId = this.value; if (S.source === 'camera') startCamera(); });
+  $('selRes').addEventListener('change', function () {
+    var p = this.value.split('x');
+    S.resolution = { w: parseInt(p[0], 10), h: parseInt(p[1], 10) };
+    if (S.source === 'camera') startCamera();
+  });
+  $('btnCam').addEventListener('click', function () { startCamera(); });
+  $('btnStop').addEventListener('click', function () { stopSource(); });
+  $('fileInput').addEventListener('change', function () { openFile(this.files && this.files[0]); });
+  $('btnPlay').addEventListener('click', togglePlay);
+  $('btnFull').addEventListener('click', toggleFullscreen);
+
+  $('selHandCx').addEventListener('change', function () { S.handComplexity = parseInt(this.value, 10); applyHandsOptions(); });
+  $('rngDetect').addEventListener('input', function () { S.handDetect = parseFloat(this.value); $('valDetect').textContent = S.handDetect.toFixed(2); });
+  $('rngDetect').addEventListener('change', applyHandsOptions);
+  $('rngTrack').addEventListener('input', function () { S.handTrack = parseFloat(this.value); $('valTrack').textContent = S.handTrack.toFixed(2); });
+  $('rngTrack').addEventListener('change', applyHandsOptions);
+  $('selPose').addEventListener('change', function () {
+    S.poseMode = this.value;
+    if (S.poseMode !== 'off' && !S.pose) { diag('Pose 未加载，无法启用身体骨骼', 'err'); this.value = 'off'; S.poseMode = 'off'; }
+    else applyPoseOptions();
+    syncPoseChip(); draw();
+  });
+  $('selPoseRate').addEventListener('change', function () { S.poseEveryFrame = (this.value === 'every'); });
+
+  bindCheck('chkMirror', 'mirror');
+  bindCheck('chkCamview', 'showCam');
+  bindCheck('chkHands', 'showHands');
+  bindCheck('chkPose', 'showPose');
+  bindCheck('chkIndex', 'showIndex');
+  bindCheck('chkLabel', 'showLabel');
+  bindCheck('chkGuides', 'showGuides');
+  $('btnAlign').addEventListener('click', function () { S.alignTest = !S.alignTest; syncFlags(); draw(); });
+  $('btnFreeze').addEventListener('click', function () { S.frozen = !S.frozen; syncFlags(); });
+  bindCheck('chkHud', 'showHud');
+  $('rngLine').addEventListener('input', function () {
+    S.lineScale = parseFloat(this.value);
+    $('valLine').textContent = S.lineScale.toFixed(1);
+    draw();
+  });
+
+  $('txtLabel').addEventListener('input', function () { S.label = this.value; applyDisplay(); });
+  $('btnJson').addEventListener('click', toggleJsonRec);
+  $('btnWebm').addEventListener('click', toggleWebmRec);
+
+  document.querySelectorAll('.sec>h2').forEach(function (h) {
+    h.addEventListener('click', function () { this.parentNode.classList.toggle('closed'); setTimeout(fitFrame, 30); });
+  });
+
+  window.addEventListener('keydown', function (e) {
+    var t = e.target && e.target.tagName;
+    if (t === 'INPUT' || t === 'SELECT' || t === 'TEXTAREA') {
+      if (e.key === 'Escape') e.target.blur();
+      return;
+    }
+    var k = e.key.toLowerCase();
+    if (k === ' ') {
+      e.preventDefault();
+      if (S.source === 'file') togglePlay();
+      else if (S.source === 'camera') stopSource();
+      else startCamera();
+    } else if (k === 'm') { S.mirror = !S.mirror; applyDisplay(); }
+    else if (k === 'h') { S.showHud = !S.showHud; applyDisplay(); }
+    else if (k === 'g') { S.showGuides = !S.showGuides; applyDisplay(); }
+    else if (k === 't') { S.alignTest = !S.alignTest; syncFlags(); draw(); }
+    else if (k === 'z') { S.frozen = !S.frozen; syncFlags(); }
+    else if (k === 'i') { S.showIndex = !S.showIndex; applyDisplay(); }
+    else if (k === 'f') { toggleFullscreen(); }
+    else if (k === 'r') { toggleJsonRec(); }
+    else if (k === 'v') { toggleWebmRec(); }
+  });
+
+  video.addEventListener('loadedmetadata', function () {
+    fitFrame();
+    if (video.videoWidth) setChip('chipRes', video.videoWidth + '×' + video.videoHeight);
+  });
+  video.addEventListener('resize', fitFrame);
+  window.addEventListener('resize', fitFrame);
+  document.addEventListener('fullscreenchange', function () { setTimeout(fitFrame, 80); });
+  if (window.ResizeObserver) new ResizeObserver(function () { fitFrame(); }).observe(stageEl);
+  window.addEventListener('beforeunload', function () {
+    if (S.recJson) stopJsonRec();
+    if (S.recWebm) stopWebmRec();
+  });
+}
+
+/* ---------- 启动 ---------- */
+window.addEventListener('error', function (e) {
+  var t = e && e.target;
+  if (t && t.tagName === 'SCRIPT') diag('脚本加载失败：' + String(t.src || '').split('/').pop(), 'err');
+}, true);
+window.addEventListener('unhandledrejection', function (e) {
+  diag('未捕获异常：' + (((e.reason && e.reason.message) || e.reason || '') + ''), 'err');
+});
+
+wire();
+applyDisplay();
+fitFrame();
+
+if (location.protocol === 'file:') {
+  banner('当前通过 <code>file://</code> 打开，浏览器一般禁止访问摄像头。请在项目目录执行 <code>python3 serve.py</code>，再打开 <code>http://localhost:8080/skeleton-recorder.html</code>；「视频文件」模式不受影响。');
+} else if (!window.isSecureContext) {
+  banner('当前不是安全上下文（需 https 或 localhost），摄像头可能不可用。');
+}
+
+initModels().then(function () {
+  if (S.ready && location.protocol !== 'file:' && S.source === 'none') startCamera();
+}).catch(function (e) {
+  diag('初始化失败：' + ((e && e.message) || e), 'err');
+  setChip('chipLib', '初始化失败', 'err');
+});
+</script>
+</body>
+</html>

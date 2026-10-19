@@ -12,30 +12,71 @@ let wordQueue = [];
 let currentDisplayWord = null;
 let lastGestureWord = null;
 let sentenceMatched = false;
+let matchedSentenceKey = null;
 let displayTimeout = null;
 let sentenceTimeout = null;
 let particleTimeout = null;
 
-// 词组合映射 - 严格按照词汇.docx的10个句子
-const comboMap = {
+// ===== 组句表 =====
+// 唯一权威来源：dataset/词汇组句表.md 第一节表格。
+// 由 tools/build_sentences.py 生成 sentences.js（SENTENCES / SENTENCE_INFO / SENTENCE_META），
+// 改句子只改 md 再重跑脚本，不要直接改下面的兜底表。
+// 兜底表仅在 sentences.js 加载失败时使用，内容必须与 md 一致：
+// 疑问句不写"吗/呢/句末的不"，疑问语气靠表情表达（md 第二节规则 6）。
+const FALLBACK_SENTENCES = {
     "你,好": "你好",
-    "我,喜欢,你": "我喜欢你",
-    "我,爱,你": "我爱你",
     "今天,天气,好": "今天天气好",
+    "你,吃,了": "你吃了吗",
+    "你,喜欢,吃,苹果": "你喜欢吃苹果吗",
     "我,吃,苹果": "我吃苹果",
     "认识,你,很,高兴": "认识你很高兴",
-    "你,吃,了,不": "你吃了吗",
-    "我,回,家": "我回家",
     "我,很,高兴": "我很高兴",
-    "你,喜欢,吃,苹果,不": "你喜欢吃苹果吗"
+    "我,回,家": "我回家",
+    "我,喜欢,你": "我喜欢你",
+    "我,爱,你": "我爱你",
+    "我,吃,了,面包": "我吃了面包",
+    "欢迎,来,我,家": "欢迎来我家",
+    "我,想要,一,杯,咖啡": "我想要一杯咖啡",
+    "我,想要,一,杯,水": "我想要一杯水",
+    "厕所,在,哪里": "厕所在哪里",
+    "等,公交车": "等公交车",
+    "我,一直,在": "我一直在",
+    "等,朋友": "等朋友",
+    "早上,好": "早上好",
+    "请,你,说,慢一点": "请你说慢一点",
+    "我,可以,看见,你,的,声音": "我可以看见你的声音"
 };
 
-// 预设句子列表
-const PRESET_SENTENCES = [
-    '你好', '我喜欢你', '我爱你', '今天天气好', '我吃苹果',
-    '认识你很高兴', '你吃了吗', '我回家',
-    '我很高兴', '你喜欢吃苹果吗'
-];
+const SENTENCES_LOADED = !!(typeof SENTENCES !== 'undefined' && SENTENCES);
+const comboMap = SENTENCES_LOADED ? SENTENCES : FALLBACK_SENTENCES;
+// 词队列上限，与 md 第二节规则 2 同一个数（sentences.js 里由脚本写入）
+const QUEUE_LIMIT = (typeof SENTENCE_META !== 'undefined' && SENTENCE_META.queueLimit) ? SENTENCE_META.queueLimit : 6;
+
+if (!SENTENCES_LOADED) {
+    console.warn('sentences.js 未加载，组句回退到 script.js 内置的 FALLBACK_SENTENCES');
+}
+
+// 键 -> md 里的展示信息（词序拆解 / 词编号 / 图片名）
+function sentenceInfo(key) {
+    return (typeof SENTENCE_INFO !== 'undefined' && SENTENCE_INFO[key]) ? SENTENCE_INFO[key] : null;
+}
+
+// 词序拆解：优先取 md 生成的 split 列，缺失时按键现推（两者结果一致）
+function sentenceSplit(key) {
+    const info = sentenceInfo(key);
+    return info ? info.split : key.split(',').join(' + ');
+}
+
+// 队列还没凑满时，列出"以当前队列为前缀"的候选句，方便边打边核对词序
+function pendingSentences() {
+    const queueStr = wordQueue.join(',');
+    if (!queueStr) return [];
+    const hits = [];
+    for (const key in comboMap) {
+        if (key.startsWith(queueStr + ',')) hits.push(comboMap[key]);
+    }
+    return hits;
+}
 
 let corpusSentences = [];
 const imageCache = {};
@@ -193,6 +234,7 @@ function createTextParticles(text, color = '#ff3131') {
 //   2) 组词效果/ 文件夹下的同名 png（http:// 下可用）
 //   3) 都没有 → 文字粒子效果
 function transformToImage(imgName) {
+    try { fetch('/diag', { method: 'POST', body: JSON.stringify({ ev: 'show-image', name: imgName }), keepalive: true }).catch(() => {}); } catch (e) {}
     isAssembling = false;
     clearParticles();
     
@@ -244,7 +286,7 @@ function addWordToQueue(word) {
     if (wordQueue.length > 0 && wordQueue[wordQueue.length - 1] === word) return;
     
     wordQueue.push(word);
-    if (wordQueue.length > 6) {
+    if (wordQueue.length > QUEUE_LIMIT) {
         wordQueue.shift();
     }
     
@@ -261,8 +303,10 @@ function checkWordCombo() {
         if (queueStr.endsWith(key)) {
             const sentence = comboMap[key];
             transformToImage(sentence + '.png');
-            addLog(`句子匹配: ${sentence}`);
-            
+            addLog(`句子匹配: ${sentence} ← ${sentenceSplit(key)}`);
+
+            // 先记键再清队列，updateWordQueueUI() 才能把拆解留在面板上
+            matchedSentenceKey = key;
             document.getElementById('sentence-match').textContent = sentence;
             sentenceMatched = true;
             
@@ -273,6 +317,7 @@ function checkWordCombo() {
             clearTimeout(sentenceTimeout);
             sentenceTimeout = setTimeout(() => {
                 hideImage();
+                matchedSentenceKey = null;
                 clearWordQueue();
                 sentenceMatched = false;
                 lastGestureWord = null;
@@ -302,6 +347,34 @@ function updateWordQueueUI() {
         item.textContent = word;
         container.appendChild(item);
     });
+    updateQueueSplitUI();
+}
+
+// 组句拆解展示（词序按 dataset/词汇组句表.md 的「词序拆解」列）
+// 命中句子：显示"今天天气好 ＝ 今天 + 天气 + 好"；未命中：显示当前队列拆解 + 候选句
+function updateQueueSplitUI() {
+    const el = document.getElementById('word-queue-split');
+    if (!el) return;
+
+    if (matchedSentenceKey) {
+        const info = sentenceInfo(matchedSentenceKey);
+        const ids = info ? `（${info.ids}）` : '';
+        el.textContent = `${comboMap[matchedSentenceKey]} ＝ ${sentenceSplit(matchedSentenceKey)}${ids}`;
+        return;
+    }
+
+    if (wordQueue.length === 0) {
+        el.textContent = '';
+        return;
+    }
+
+    const candidates = pendingSentences();
+    let hint = '';
+    if (candidates.length > 0) {
+        const shown = candidates.slice(0, 3).join(' / ');
+        hint = ` ｜ 候选: ${shown}${candidates.length > 3 ? ' …' : ''}`;
+    }
+    el.textContent = `拆解: ${wordQueue.join(' + ')}${hint}`;
 }
 
 // ===== 手势识别回调 =====
@@ -315,16 +388,15 @@ function onGestureDetected(gesture) {
         console.log('[手势检测] 句子已匹配，忽略新手势');
         return;
     }
-    if (gesture === lastGestureWord) {
-        console.log('[手势检测] 重复手势:', gesture);
-        return;
-    }
-    
+    // 注意：这里绝不能再按"与上一次相同的词"拦截。
+    // 之前 `if (gesture === lastGestureWord) return;` 会让同一个手势只能出一次图，
+    // 画面消失后再打一遍也永远没反应（lastGestureWord 只在句子匹配后才重置）。
+    // 同一次动作的重复触发已由识别器内部的 armed 门闩 + consumeHistory 负责。
     lastGestureWord = gesture;
-    console.log('[手势检测] 处理新手势:', gesture);
+    console.log('[手势检测] 处理手势:', gesture);
     // 判断识别来源
     const isSLR500 = typeof SLR500_WORDS !== 'undefined' && SLR500_WORDS.includes(gesture);
-    const BASIC_WORDS = ['我','你','好','不','很','喜欢','回','天气','吃','饭','今天','爱','家','苹果','认识','高兴','了'];
+    const BASIC_WORDS = ['我','你','好','不','很','喜欢','回','天气','吃','米饭','今天','爱','家','苹果','认识','高兴','了'];
     const source = (isSLR500 && !BASIC_WORDS.includes(gesture)) ? ' [SLR500]' : '';
     addLog(`识别到手势: ${gesture}${source}`);
     
@@ -352,6 +424,36 @@ function addLog(message) {
     const logEl = document.getElementById('log-stream');
     const time = new Date().toLocaleTimeString();
     logEl.innerHTML = `[${time}] ${message}<br>${logEl.innerHTML}`;
+}
+
+// ===== 静态判据实时读数（001–005）=====
+// 手势不出图时，这行读数直接告诉你"最接近哪个词、还差哪一维"，不用再去翻 /tmp/sign_diag.log。
+// 按 D 键显示/隐藏。
+function initStaticHud(recognizer) {
+    const el = document.getElementById('static-hud');
+    if (!el) return;
+    el.style.display = 'block';
+    setInterval(() => {
+        if (el.style.display === 'none') return;
+        try {
+            el.textContent = recognizer.staticHudText();
+        } catch (e) {
+            el.textContent = 'HUD 异常: ' + e.message;
+        }
+    }, 200);
+    window.addEventListener('keydown', (e) => {
+        if (e.key === 'd' || e.key === 'D') {
+            el.style.display = (el.style.display === 'none') ? 'block' : 'none';
+        }
+        if (e.key === 'p' || e.key === 'P') {
+            // 身体骨骼被自动停用（Pose 连续失败）后按 P 重试，不用刷新整页
+            if (recognizer.retryPose && recognizer.retryPose()) {
+                addLog('已重新启用身体骨骼（Pose）');
+            } else {
+                addLog('Pose 不可用：依赖没加载成功，请跑 bash tools/fetch_vendor.sh 后刷新');
+            }
+        }
+    });
 }
 
 // ===== 加载corpus =====
@@ -394,6 +496,13 @@ function preloadImages() {
 // ===== 初始化 =====
 async function init() {
     console.log('手语识别交互系统 V3 启动中...');
+
+    // MediaPipe 现在是异步加载的（本地 vendor 优先、CDN 兜底，见 mp-loader.js）。
+    // 必须等它落地再 new Hands/Pose：否则 DOMContentLoaded 触发时 Hands 还没定义，
+    // 会直接抛"MediaPipe Hands 未加载"，页面永远黑着。
+    if (window.mpReady) {
+        try { await window.mpReady; } catch (e) { console.warn('MediaPipe 依赖加载异常:', e); }
+    }
     
     // 检查SLR500模板数据
     if (typeof SLR500_WORDS !== 'undefined') {
@@ -403,6 +512,15 @@ async function init() {
         console.warn('SLR500模板数据未加载');
     }
     
+    // 组句表状态（来源：dataset/词汇组句表.md → sentences.js）
+    const sentenceCount = Object.keys(comboMap).length;
+    if (SENTENCES_LOADED && typeof SENTENCE_META !== 'undefined') {
+        console.log(`组句表已加载: ${sentenceCount} 句（来源 ${SENTENCE_META.source}，最长 ${SENTENCE_META.maxWords} 词，队列上限 ${QUEUE_LIMIT}）`);
+        addLog(`组句表: ${sentenceCount} 句 ← ${SENTENCE_META.source}`);
+    } else {
+        addLog(`组句表: ${sentenceCount} 句（sentences.js 未加载，用内置兜底表）`);
+    }
+
     initParticleSystem();
     preloadImages();
     await loadCorpus();
@@ -412,6 +530,10 @@ async function init() {
     
     const recognizer = new GestureRecognizer();
     recognizer.onGestureResult = onGestureDetected;
+    window.recognizer = recognizer;
+    initStaticHud(recognizer);
+
+
     recognizer.onError = (stage, message) => {
         addLog(`${stage} 异常: ${message}`);
         if (typeof window.__diag === 'function') window.__diag(`${stage}: ${message}`);

@@ -10,3 +10,11 @@ build/
 
 # 大型数据集（8.7GB、12.5 万个 txt），不纳入 git，请单独备份到移动硬盘或网盘
 slr500_words_joints/
+
+# 自建数据集：原始视频与骨骼预览体积大，不入库（骨骼 JSON 与 processed/ 需要入库）
+dataset/video/
+dataset/preview/
+
+# MediaPipe 离线依赖（约 74MB，执行 bash tools/fetch_vendor.sh 重新下载即可）
+# 不入库；万一缺失，两个页面会自动回退到 CDN
+vendor/

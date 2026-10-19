@@ -235,6 +235,21 @@ body, html {
     font-size: 14px;
 }
 
+#word-queue-split {
+    margin-top: 8px;
+    padding-top: 6px;
+    border-top: 1px dashed #a68a76;
+    font-family: 'Courier Prime', monospace;
+    font-size: 12px;
+    line-height: 1.5;
+    color: var(--retro-dark);
+    word-break: break-all;
+}
+
+#word-queue-split:empty {
+    display: none;
+}
+
 .word-item {
     display: inline-block;
     padding: 4px 10px;
@@ -412,4 +427,23 @@ body, html {
 #diag-panel .diag-line {
     white-space: pre-wrap;
     word-break: break-all;
+}
+
+/* ===== 静态判据实时读数（001–005 调试用，按 D 键隐藏）===== */
+#static-hud {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    max-width: 46vw;
+    z-index: 9998;
+    padding: 8px 12px;
+    background: rgba(0, 12, 20, 0.86);
+    border: 2px solid rgba(120, 220, 255, 0.75);
+    font-family: 'Courier Prime', 'VT323', monospace;
+    font-size: 11px;
+    line-height: 1.5;
+    color: #d6f5ff;
+    white-space: pre-wrap;
+    word-break: break-all;
+    pointer-events: none;
 }
